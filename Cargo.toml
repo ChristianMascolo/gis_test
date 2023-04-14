@@ -1,0 +1,13 @@
+[package]
+name = "gis_test"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+geo-bevy = "0.3.0"
+bevy = "0.9.1"
+geo-types = "0.7.8"
+geo = "0.23"
+geojson = { version = "*", features = ["geo-types"] }
