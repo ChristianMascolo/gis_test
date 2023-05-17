@@ -48,11 +48,11 @@ fn main() {
     app.add_plugin(bevy::core_pipeline::CorePipelinePlugin::default());
     app.add_plugin(bevy::transform::TransformPlugin::default());
     app.add_plugin(bevy::sprite::SpritePlugin::default());
-    // app.add_plugin(camera::MyCameraPlugin);
+    app.add_plugin(camera::MyCameraPlugin);
 
     // events
-    // app.add_event::<event::MeshSpawnedEvent>();
-    // app.add_event::<event::ZoomEvent>();
+    app.add_event::<event::MeshSpawnedEvent>();
+    app.add_event::<event::ZoomEvent>();
 
     // systems
     app.add_startup_system(building_meshes);
@@ -64,19 +64,19 @@ fn main() {
 fn building_meshes(
     windows: Res<Windows>,
     asset_server: Res<AssetServer>,
-    // mut spawned_mesh_event: bevy::ecs::event::EventWriter<event::MeshSpawnedEvent>,
+    mut spawned_mesh_event: bevy::ecs::event::EventWriter<event::MeshSpawnedEvent>,
     mut commands: Commands,
     mut assets_meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
-    commands.spawn(bevy::prelude::Camera2dBundle {
-    transform: bevy::prelude::Transform::from_xyz(0.0, 0.0, 999.9),
+    // commands.spawn(bevy::prelude::Camera2dBundle {
+    // transform: bevy::prelude::Transform::from_xyz(0.0, 0.0, 999.9),
     // .with_rotation(bevy::prelude::Quat::from_rotation_z(30.0f32.to_radians())),
-    ..Default::default()
-    });
+    // ..Default::default()
+    // });
 
     let feature_collection =
-        read_geojson_feature_collection(read_geojson("maps/only_point.geojson".to_owned()));
+        read_geojson_feature_collection(read_geojson("maps/only_polygon.geojson".to_owned()));
 
     //window istance
     let win_primary = windows.primary();
@@ -117,7 +117,7 @@ fn building_meshes(
         let proj = Proj::new_known_crs(&from, &to, Some(area)).unwrap();
         let result = projection_geometry(geom.clone().into(), proj);
 
-        let mesh_iter = build_bevy_meshes(&result, Color::RED, BuildBevyMeshesContext::new())
+        let mesh_iter = build_bevy_meshes(&geom, Color::RED, BuildBevyMeshesContext::new())
             .unwrap()
             .collect::<Vec<_>>();
 
@@ -125,9 +125,9 @@ fn building_meshes(
             match prepared_mesh {
                 geo_bevy::PreparedMesh::Point(points) => {
                     for geo::Point(coord) in points.iter() {
-                        // spawned_mesh_event.send(event::MeshSpawnedEvent(SpawnedBundle::Points(
-                            // points.clone(),
-                        // )));
+                        spawned_mesh_event.send(event::MeshSpawnedEvent(SpawnedBundle::Points(
+                            points.clone(),
+                        )));
                         println!("Coord before transformation {:?}", coord);
 
                         let color = Color::RED;
@@ -150,8 +150,8 @@ fn building_meshes(
                     }
                 }
                 geo_bevy::PreparedMesh::Polygon { mesh, color } => {
-                    // spawned_mesh_event
-                        // .send(event::MeshSpawnedEvent(SpawnedBundle::Mesh(mesh.clone())));
+                    spawned_mesh_event
+                        .send(event::MeshSpawnedEvent(SpawnedBundle::Mesh(mesh.clone())));
                     // let Some(bevy::render::mesh::VertexAttributeValues::Float32x4(vert_attr)) =
                     // mesh.attribute(Mesh::ATTRIBUTE_POSITION);
                     println!("Inside Polygon, topology:{:?}", mesh.primitive_topology());
@@ -160,15 +160,15 @@ fn building_meshes(
                     commands.spawn(MaterialMesh2dBundle {
                         material,
                         mesh: bevy::sprite::Mesh2dHandle(assets_meshes.add(mesh.clone())),
-                        transform: bevy::prelude::Transform::from_xyz(0., 0., 998.),
+                        transform: bevy::prelude::Transform::from_xyz(0., 0., 1.),
                         // .with_scale(Vec3::splat(128.)),
                         visibility: bevy::render::view::Visibility { is_visible: true },
                         ..Default::default()
                     });
                 }
                 geo_bevy::PreparedMesh::LineString { mesh, color } => {
-                    // spawned_mesh_event
-                        // .send(event::MeshSpawnedEvent(SpawnedBundle::Mesh(mesh.clone())));
+                    spawned_mesh_event
+                        .send(event::MeshSpawnedEvent(SpawnedBundle::Mesh(mesh.clone())));
                     // let Some(bevy::render::mesh::VertexAttributeValues::Float32x4(vert_attr)) =
                     // mesh.attribute(Mesh::ATTRIBUTE_POSITION);
                     println!("Inside Polygon, topology:{:?}", mesh.primitive_topology());

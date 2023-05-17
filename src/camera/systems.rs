@@ -58,21 +58,28 @@ fn handle_meshes_spawned_event(
 ) {
     for event in meshes_spawned_event_reader.iter() {
         if !(*has_moved) {
-
             match &event.0 {
                 event::SpawnedBundle::Points(points) => {
-                    for geo::Point(coord) in points.iter(){
+                    for geo::Point(coord) in points.iter() {
                         println!("Handle meshes spawned event point");
-                        zoom_event.send(ZoomEvent::new(1.5, *coord));
+                        zoom_event.send(ZoomEvent::new(0.5, *coord));
                     }
-                },
+                }
                 event::SpawnedBundle::Mesh(mesh) => {
-                    if let Some(bevy::render::mesh::VertexAttributeValues::Float32x4(vert_attr)) =
-                        mesh.attribute(Mesh::ATTRIBUTE_POSITION)
-                    {
-                        for v in vert_attr {
-                            // let vert = Vec3::new(v[0], v[1], v[2]);
-                            zoom_event.send(ZoomEvent::new(1.5, Coord { x: v[0] as f64 , y: v[1] as f64}));
+                    println!("Handle meshes spawned event point");
+
+                    for (i, id) in mesh.attributes().into_iter().enumerate() {
+                        if i == 0 as usize {
+                            let vert_attr = id.1.as_float3().unwrap();
+                            for v in vert_attr {
+                                zoom_event.send(ZoomEvent::new(
+                                    0.5,
+                                    Coord {
+                                        x: v[0] as f64,
+                                        y: v[1] as f64,
+                                    },
+                                ));
+                            }
                         }
                     }
                 }
@@ -101,7 +108,7 @@ fn zoom(
     let mut camera_scale = before_scale.clone();
     let mut set = false;
 
-    for event in zoom_camera_event_reader.iter(){
+    for event in zoom_camera_event_reader.iter() {
         if !set {
             set = true;
             mouse_offset = Offset::from_coord(event.coord);
@@ -115,7 +122,7 @@ fn zoom(
 
         offset.x -= xd * (1.0 - before_scale.0 / camera_scale.0);
         offset.y -= yd * (1.0 - before_scale.0 / camera_scale.0);
-    
+
         if offset.x.is_finite() && offset.y.is_finite() {
             super::set_camera_transform(&mut transform, offset, camera_scale);
         }
