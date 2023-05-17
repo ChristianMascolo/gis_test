@@ -2,22 +2,14 @@ mod systems;
 
 use bevy::ui::Val;
 
-#[derive(Clone, Copy)]
-pub struct Offset {
-    pub x: f32,
-    pub y: f32,
-}
-
-#[derive(Clone, Copy)]
-pub struct Scale(pub f32);
-
 #[derive(Copy, Clone, Debug)]
-pub struct Coord{
-    pub x: f64,
-    pub y: f64,
+pub struct MySettings {
+    pub offset: Offset,
+    pub scale: f32,
+    pub coord: Coord,
+    pub length: f32,
+    pub size: Size,
 }
-
-pub struct Length(pub f32);
 
 pub struct Size{
     pub width: f32,
@@ -25,7 +17,7 @@ pub struct Size{
 }
 
 impl Size{
-    fn from_width_height(width: Length, height: Length) -> Self{
+    fn from_width_height(width: f32, height: f32) -> Self{
         Size { width: (width.0), height: (height.0) }
     }
 
@@ -37,12 +29,10 @@ impl Size{
     }
 }
 
-pub struct MyArea<'a>{
-    pub window: &'a bevy::window::Window,
-    pub left_offset_px: f32,
-    pub top_offset_px: f32,
-    pub right_offset_px: f32,
-    pub bottom_offset_px: f32,
+#[derive(Copy, Clone, Debug)]
+pub struct Coord{
+    pub x: f64,
+    pub y: f64,
 }
 
 impl Coord{
@@ -67,6 +57,14 @@ impl Coord{
             y: pos_wld.y,
         }
     }
+}
+
+pub struct MyArea<'a>{
+    pub window: &'a bevy::window::Window,
+    pub left_offset_px: f32,
+    pub top_offset_px: f32,
+    pub right_offset_px: f32,
+    pub bottom_offset_px: f32,
 }
 
 impl<'a> MyArea<'a>{
@@ -112,17 +110,23 @@ impl<'a> MyArea<'a>{
         )
     }
 
-    fn width(&self) -> Length {
-        Length(self.window.width() - self.left_offset_px - self.right_offset_px)
+    fn width(&self) -> f32 {
+        self.window.width() - self.left_offset_px - self.right_offset_px
     }
 
-    fn height(&self) -> Length {
-        Length(self.window.height() - self.top_offset_px - self.bottom_offset_px)
+    fn height(&self) -> f32 {
+        self.window.height() - self.top_offset_px - self.bottom_offset_px
     }
 
     pub fn size(&self) -> Size{
         Size::from_width_height(self.width(), self.height())
     }
+}
+
+#[derive(Clone, Copy)]
+pub struct Offset {
+    pub x: f32,
+    pub y: f32,
 }
 
 impl Offset {
@@ -140,12 +144,12 @@ impl Offset {
         }
     }
 
-    fn pan_x(&mut self, amount: f32, scale: Scale) {
+    fn pan_x(&mut self, amount: f32, scale: f32) {
         // what is the camera scale?
         self.x += amount * scale.0;
     }
 
-    fn pan_y(&mut self, amount: f32, scale: Scale) {
+    fn pan_y(&mut self, amount: f32, scale: f32) {
         self.y += amount * scale.0;
     }
 
@@ -157,9 +161,9 @@ impl Offset {
     }
 }
 
-impl Scale {
-    fn from_transform(transform: &bevy::prelude::Transform) -> Self {
-        Scale(transform.scale.as_ref()[0])
+impl MySettings {
+    fn from_transform(transform: &bevy::prelude::Transform) -> f32 {
+        transform.scale.as_ref()[0]
     }
 
     fn zoom(&mut self, amount: f32) {
@@ -190,7 +194,7 @@ fn determine_scale(win_width: f32, win_height:f32, bevy_size: bevy::ui::Size) ->
 fn set_camera_transform(
     transform: &mut bevy::prelude::Transform,
     offset: Offset,
-    scale: Scale,
+    scale: f32,
 ){
     transform.translation = offset.to_transform_translation_vec();
     transform.scale = scale.to_transform_scale_vec();
