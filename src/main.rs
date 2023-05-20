@@ -88,8 +88,8 @@ fn building_meshes(
     let win_top = win_height / 2.0;
 
     //proj istance
-    let from = "EPSG:4326";
-    let to = "EPSG:3857";
+    let from = "EPSG:6875";
+    let to = "EPSG:6711";
 
     // Calcola il rettangolo che contiene tutte le mesh
     let mut mesh_rect = Rect::new(
@@ -117,7 +117,7 @@ fn building_meshes(
         let proj = Proj::new_known_crs(&from, &to, Some(area)).unwrap();
         let result = projection_geometry(geom.clone().into(), proj);
 
-        let mesh_iter = build_bevy_meshes(&geom, Color::RED, BuildBevyMeshesContext::new())
+        let mesh_iter = build_bevy_meshes(&result, Color::RED, BuildBevyMeshesContext::new())
             .unwrap()
             .collect::<Vec<_>>();
 
