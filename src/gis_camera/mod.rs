@@ -2,23 +2,19 @@ mod systems;
 
 use bevy::ui::Val;
 
-#[derive(Copy, Clone, Debug)]
-pub struct MySettings {
-    pub offset: Offset,
-    pub scale: f32,
-    pub coord: Coord,
-    pub length: f32,
-    pub size: Size,
-}
+pub struct Length(pub f32);
 
-pub struct Size{
+pub struct Size {
     pub width: f32,
     pub height: f32,
 }
 
-impl Size{
-    fn from_width_height(width: f32, height: f32) -> Self{
-        Size { width: (width.0), height: (height.0) }
+impl Size {
+    fn from_width_height(width: Length, height: Length) -> Self {
+        Size {
+            width: (width.0),
+            height: (height.0),
+        }
     }
 
     pub fn to_bevy_size(&self) -> bevy::ui::Size {
@@ -30,12 +26,12 @@ impl Size{
 }
 
 #[derive(Copy, Clone, Debug)]
-pub struct Coord{
+pub struct Coord {
     pub x: f64,
     pub y: f64,
 }
 
-impl Coord{
+impl Coord {
     fn to_dvec2(self) -> bevy::math::DVec2 {
         bevy::math::DVec2::new(self.x, self.y)
     }
@@ -44,7 +40,7 @@ impl Coord{
         self,
         transform: &bevy::transform::components::Transform,
         window: &bevy::prelude::Window,
-    )-> geo::Coord{
+    ) -> geo::Coord {
         let size = bevy::math::DVec2::new(f64::from(window.width()), f64::from(window.height()));
         // the default orthographic projection is in pixels from the center;
         // just undo the translation
@@ -52,14 +48,14 @@ impl Coord{
         // apply the camera transform
         let pos_wld = transform.compute_matrix().as_dmat4() * p.extend(0.0).extend(1.0);
 
-        geo::Coord{
+        geo::Coord {
             x: pos_wld.x,
             y: pos_wld.y,
         }
     }
 }
 
-pub struct MyArea<'a>{
+pub struct MyArea<'a> {
     pub window: &'a bevy::window::Window,
     pub left_offset_px: f32,
     pub top_offset_px: f32,
@@ -67,11 +63,11 @@ pub struct MyArea<'a>{
     pub bottom_offset_px: f32,
 }
 
-impl<'a> MyArea<'a>{
-    fn top_left_screen_coord(&self) -> Coord{
-        Coord { 
-            x: f64::from(self.left_offset_px), 
-            y: f64::from(self.top_offset_px)
+impl<'a> MyArea<'a> {
+    fn top_left_screen_coord(&self) -> Coord {
+        Coord {
+            x: f64::from(self.left_offset_px),
+            y: f64::from(self.top_offset_px),
         }
     }
 
@@ -79,7 +75,7 @@ impl<'a> MyArea<'a>{
         &self,
         transform: &bevy::transform::components::Transform,
         window: &bevy::prelude::Window,
-    ) -> geo::Coord{
+    ) -> geo::Coord {
         self.top_left_screen_coord().to_geo_coord(transform, window)
     }
 
@@ -110,15 +106,15 @@ impl<'a> MyArea<'a>{
         )
     }
 
-    fn width(&self) -> f32 {
-        self.window.width() - self.left_offset_px - self.right_offset_px
+    fn width(&self) -> Length {
+        Length(self.window.width() - self.left_offset_px - self.right_offset_px)
     }
 
-    fn height(&self) -> f32 {
-        self.window.height() - self.top_offset_px - self.bottom_offset_px
+    fn height(&self) -> Length {
+        Length(self.window.height() - self.top_offset_px - self.bottom_offset_px)
     }
 
-    pub fn size(&self) -> Size{
+    pub fn size(&self) -> Size {
         Size::from_width_height(self.width(), self.height())
     }
 }
@@ -144,12 +140,12 @@ impl Offset {
         }
     }
 
-    fn pan_x(&mut self, amount: f32, scale: f32) {
+    fn pan_x(&mut self, amount: f32, scale: Scale) {
         // what is the camera scale?
         self.x += amount * scale.0;
     }
 
-    fn pan_y(&mut self, amount: f32, scale: f32) {
+    fn pan_y(&mut self, amount: f32, scale: Scale) {
         self.y += amount * scale.0;
     }
 
@@ -161,9 +157,12 @@ impl Offset {
     }
 }
 
-impl MySettings {
-    fn from_transform(transform: &bevy::prelude::Transform) -> f32 {
-        transform.scale.as_ref()[0]
+#[derive(Clone, Copy)]
+pub struct Scale(pub f32);
+
+impl Scale {
+    fn from_transform(transform: &bevy::prelude::Transform) -> Self {
+        Scale(transform.scale.as_ref()[0])
     }
 
     fn zoom(&mut self, amount: f32) {
@@ -179,31 +178,27 @@ fn get_bevy_size(width: f32, height: f32) -> bevy::ui::Size {
     bevy::ui::Size::new(bevy::ui::Val::Px(width), bevy::ui::Val::Px(height))
 }
 
-fn determine_scale(win_width: f32, win_height:f32, bevy_size: bevy::ui::Size) -> f32 {
-    let width: f32 = match bevy_size.width{
+fn determine_scale(win_width: f32, win_height: f32, bevy_size: bevy::ui::Size) -> f32 {
+    let width: f32 = match bevy_size.width {
         Val::Px(p) => p,
         _ => unreachable!(),
     };
-    let height: f32 = match bevy_size.height{
+    let height: f32 = match bevy_size.height {
         Val::Px(p) => p,
         _ => unreachable!(),
     };
     (win_width / width).max(win_height / height)
 }
 
-fn set_camera_transform(
-    transform: &mut bevy::prelude::Transform,
-    offset: Offset,
-    scale: f32,
-){
+fn set_camera_transform(transform: &mut bevy::prelude::Transform, offset: Offset, scale: Scale) {
     transform.translation = offset.to_transform_translation_vec();
     transform.scale = scale.to_transform_scale_vec();
 }
 
 pub struct MyCameraPlugin;
 
-impl bevy::app::Plugin for MyCameraPlugin{
-    fn build(&self, app: &mut bevy::prelude::App){
+impl bevy::app::Plugin for MyCameraPlugin {
+    fn build(&self, app: &mut bevy::prelude::App) {
         app.add_startup_system_set(systems::startup_system_set())
             .add_system_set(systems::system_set());
     }

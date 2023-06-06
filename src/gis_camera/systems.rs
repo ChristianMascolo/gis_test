@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use geo_types::{coord, Coord};
 
-use crate::event::{self, ZoomEvent};
+use crate::gis_event::*;
 
 use super::{Offset, Scale};
 
@@ -52,21 +52,21 @@ fn center_camera(
 }
 
 fn handle_meshes_spawned_event(
-    mut meshes_spawned_event_reader: bevy::ecs::event::EventReader<event::MeshSpawnedEvent>,
-    mut zoom_event: bevy::ecs::event::EventWriter<event::ZoomEvent>,
+    mut meshes_spawned_event_reader: bevy::ecs::event::EventReader<MeshSpawnedEvent>,
+    mut zoom_event: bevy::ecs::event::EventWriter<ZoomEvent>,
     mut has_moved: bevy::ecs::system::Local<bool>,
 ) {
     for event in meshes_spawned_event_reader.iter() {
         if !(*has_moved) {
             match &event.0 {
-                event::SpawnedBundle::Points(points) => {
+                SpawnedBundle::Points(points) => {
                     for geo::Point(coord) in points.iter() {
-                        println!("Handle meshes spawned event point");
+                        println!("Handle meshes spawned gis_event point");
                         zoom_event.send(ZoomEvent::new(0.5, *coord));
                     }
                 }
-                event::SpawnedBundle::Mesh(mesh) => {
-                    println!("Handle meshes spawned event point");
+                SpawnedBundle::Mesh(mesh) => {
+                    println!("Handle meshes spawned gis_event point");
 
                     for (i, id) in mesh.attributes().into_iter().enumerate() {
                         if i == 0 as usize {
@@ -91,7 +91,7 @@ fn handle_meshes_spawned_event(
 }
 
 fn zoom(
-    mut zoom_camera_event_reader: bevy::ecs::event::EventReader<event::ZoomEvent>,
+    mut zoom_camera_event_reader: bevy::ecs::event::EventReader<ZoomEvent>,
     mut query: Query<
         &mut bevy::transform::components::Transform,
         bevy::ecs::query::With<bevy::render::camera::Camera>,
@@ -100,7 +100,7 @@ fn zoom(
     if zoom_camera_event_reader.is_empty() {
         return;
     }
-    println!("Inside zoom event handler");
+    println!("Inside zoom gis_event handler");
     let mut transform = query.single_mut();
     let mut offset = Offset::from_transform(&transform);
     let mut mouse_offset = offset.clone();
