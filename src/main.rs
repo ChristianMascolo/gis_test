@@ -1,9 +1,9 @@
 #![allow(deprecated)]
 
 mod gis_camera;
-mod gis_event;
-mod gis_id;
-mod gis_layers;
+// mod gis_event;
+// mod gis_id;
+// mod gis_layers;
 
 use ::bevy::{
     prelude::{App, Color},
@@ -26,8 +26,8 @@ use bevy::{
 };
 use bevy_asset::Handle;
 
-use crate::gis_camera::MyCameraPlugin;
-use crate::gis_event::*;
+// use crate::gis_camera::MyCameraPlugin;
+// use crate::gis_event::*;
 use geo::Rect;
 use geo_bevy::{build_bevy_meshes, BuildBevyMeshesContext};
 use geo_types::Coord;
@@ -36,14 +36,8 @@ use proj::Transform;
 use proj::{Area, Proj};
 
 fn main() {
-    let mut app = App::new();
+    let mut app = App::new();    
 
-    // resources
-    app.insert_resource(ClearColor(Color::rgb(255., 255., 255.)));
-
-    // plugins
-    app.add_plugins(bevy::MinimalPlugins);
-    app.add_plugin(bevy::asset::AssetPlugin::default());
     app.add_plugin(WindowPlugin {
         window: WindowDescriptor {
             width: 1100.,
@@ -53,6 +47,14 @@ fn main() {
         },
         ..Default::default()
     });
+
+
+    // resources
+    app.insert_resource(ClearColor(Color::rgb(255., 255., 255.)));
+
+    // plugins
+    app.add_plugins(bevy::MinimalPlugins);
+    app.add_plugin(bevy::asset::AssetPlugin::default());
     app.add_plugin(bevy::winit::WinitPlugin::default());
     app.add_plugin(bevy::render::RenderPlugin::default());
     app.add_plugin(bevy::render::texture::ImagePlugin::default());
@@ -70,10 +72,10 @@ fn main() {
     // systems
     app.add_startup_system(building_meshes);
     app.add_system_to_stage(
-        CoreStage::PostUpdate,
-        update_global_transform.after(TransformSystem::TransformPropagate),
+         CoreStage::PostUpdate,
+         handle_global_transform.after(TransformSystem::TransformPropagate),
     );
-    // app.add_system(handle_global_transform);
+    app.add_system(handle_global_transform);
 
     // run
     app.run();
@@ -93,48 +95,25 @@ fn building_meshes(
     });
 
     let feature_collection =
-        read_geojson_feature_collection(read_geojson("maps/only_polygon.geojson".to_owned()));
-
-    //window instances
-    let win_primary = windows.primary();
-    let win_height = win_primary.height();
-    let win_width = win_primary.width();
-    let win_left = -win_width / 2.0;
-    let win_right = win_width / 2.0;
-    let win_bottom = -win_height / 2.0;
-    let win_top = win_height / 2.0;
+        read_geojson_feature_collection(read_geojson("maps/only_point.geojson".to_owned()));
 
     //proj instances
     let from = "EPSG:4326";
     let to = "EPSG:3875";
-
-    /* Calcola il rettangolo che contiene tutte le mesh */
-    let mut mesh_rect = Rect::new(
-        Coord {
-            x: std::f64::MAX,
-            y: std::f64::MAX,
-        },
-        Coord {
-            x: std::f64::MIN,
-            y: std::f64::MIN,
-        },
-    );
 
     for feature in feature_collection {
         let geometry = feature.geometry.unwrap();
         let geom: geo_types::geometry::Geometry<f64> = geometry.try_into().unwrap();
 
         // convert geom to proj format
-        let area = Area::new(
-            win_left as f64,
-            win_bottom as f64,
-            win_right as f64,
-            win_top as f64,
-        );
         let proj = Proj::new_known_crs(&from, &to, None).unwrap();
         let result = projection_geometry(geom.clone().into(), proj);
 
-        let mesh_iter = build_bevy_meshes(&geom, Color::RED, BuildBevyMeshesContext::new())
+        println!("coord before projection: {:?}", geom);
+        println!("coord before projection: {:?}", result);
+
+
+        let mesh_iter = build_bevy_meshes(&result, Color::RED, BuildBevyMeshesContext::new())
             .unwrap()
             .collect::<Vec<_>>();
 
@@ -240,16 +219,16 @@ fn handle_global_transform(
     }
 }
 
-fn update_global_transform(
-    query: CameraGlobalTransformQuery,
-    mesh: Query<&MaterialMesh2dBundle<Handle<ColorMaterial>>>,
-) {
-    if let Ok(global_transform) = query.get_single() {
-        let (scale, _, _) = global_transform.to_scale_rotation_translation();
-        println!("Scale -> {:?}", scale);
-        println!("Scale truncate -> {:?}", scale.truncate());
-    }
-
-    // let gxf = query.get_single().unwrap();
-    // println!("Entity at: {:?}", gxf.translation());
-}
+// fn update_global_transform(
+//     query: CameraGlobalTransformQuery,
+//     mesh: Query<&MaterialMesh2dBundle<Handle<ColorMaterial>>>,
+// ) {
+//     if let Ok(global_transform) = query.get_single() {
+//         let (scale, _, _) = global_transform.to_scale_rotation_translation();
+//         println!("Scale -> {:?}", scale);
+//         println!("Scale truncate -> {:?}", scale.truncate());
+//     }
+//
+//     // let gxf = query.get_single().unwrap();
+//     // println!("Entity at: {:?}", gxf.translation());
+// }
