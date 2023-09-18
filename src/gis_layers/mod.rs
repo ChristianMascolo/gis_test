@@ -1,9 +1,8 @@
-use bevy::prelude::*;
-use geo::contains::Contains;
-use std::sync;
+use bevy_asset::Error;
+use crate::gis_layer_id::*;
 
 pub struct Layer{
-    pub id: gis_layer_id::LayerId,
+    pub id: LayerId,
     pub name: String,
     pub crs: String,
     pub geom_type: geo_types::Geometry,
@@ -19,7 +18,7 @@ impl AllLayers{
     pub fn new() -> AllLayers{
         AllLayers{
             layers: vec![],
-            selected_layer_id: None,
+            selected_layer_id: 0,
         }
     }
 
@@ -38,7 +37,7 @@ impl AllLayers{
     pub fn containing_coord(
         &self,
         coord: geo::Coord,
-    ) -> impl Iteratore<Item = &Layer>{
+    ) -> impl Iterator<Item = &Layer>{
         self.iter_top_to_bottom()
             .filter(move |layer| match layer.geom_type{
                 Some(ref geom) => geom.as_ref().contains(&coord),
@@ -46,8 +45,8 @@ impl AllLayers{
             })
     }
 
-    fn next_layer_id(&self) -> gis_layer_id::LayerId {
-        gis_layer_id::LayerId::new()
+    fn next_layer_id(&self) -> LayerId {
+        LayerId::new()
     }
 
     fn add(
@@ -55,7 +54,7 @@ impl AllLayers{
         coord: geo::Coord,
         name: String,
         crs: String,
-    ) -> Result<gis_layer_id::LayerId>{
+    ) -> Result<LayerId, Error>{
         let id = self.next_layer_id();
         let geom_type = geo_geom_type::determine(coord.as_raw().geometry_iter());
         let layer = Layer{
@@ -67,7 +66,7 @@ impl AllLayers{
         };
 
         self.layers.push(layer);
-        Ok(id);
+        Ok(id)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &Layer> {

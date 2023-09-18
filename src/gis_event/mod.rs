@@ -1,11 +1,11 @@
-pub struct CreateLayerEventWriter(pub i32); //la struttura contiene l'id del layer creato
+pub(crate) struct CreateLayerEventWriter(pub i32); //la struttura contiene l'id del layer creato
 
-pub struct CenterCameraEvent(pub i32); //contiene l'id del layer di riferimento
+pub(crate) struct CenterCameraEvent(pub i32); //contiene l'id del layer di riferimento
 
-pub struct MeshSpawnedEvent(pub i32); //contiene l'id del layer dove viene generata la mesh
+pub(crate) struct MeshSpawnedEvent(pub i32); //contiene l'id del layer dove viene generata la mesh
 
 #[derive(Debug)]
-pub struct PanCameraEvent {
+pub(crate) struct PanCameraEvent {
     // X offset for camera position. Positive is right, negative is left.
     pub x: f32,
     // Y offset for camera position. Positive is up, negative is down.
@@ -35,7 +35,7 @@ impl PanCameraEvent {
 }
 
 #[derive(Debug)]
-pub struct ZoomCameraEvent {
+pub(crate) struct ZoomCameraEvent {
     /// * `amount ∈ (1, ∞)` → zoom in
     /// * `amount ∈ [1]` → no change
     /// * `amount ∈ (0, 1)` → zoom out
@@ -54,21 +54,19 @@ impl ZoomCameraEvent {
     }
 }
 
-pub struct CreateLayerEventReader{
+pub(crate) struct CreateLayerEventReader{
     pub name: String,
     pub crs: String,
     pub coord: geo::Coord,
 }
 
-pub struct Plugin;
+pub(crate) struct Plugin;
 
 impl bevy::app::Plugin for Plugin{
-    fn build(&self, app: &mut App){
-        app.add_event::<LayerCreatedEvent>()
-            .add_event::<CenterCameraEvent>()
+    fn build(&self, app: &mut bevy::prelude::App){
+        app.add_event::<CenterCameraEvent>()
             .add_event::<MeshSpawnedEvent>()
             .add_event::<PanCameraEvent>()
             .add_event::<ZoomCameraEvent>()
-            .add_event::<NewLayerEvent>()
     }
 }

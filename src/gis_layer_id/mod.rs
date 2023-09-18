@@ -5,7 +5,6 @@ clippy::unimplemented,
 clippy::indexing_slicing,
 clippy::expect_used
 )]
-
 use std::{num, sync};
 
 // The starting value is `1` so we can utilize `NonZeroU16`.

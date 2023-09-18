@@ -1,39 +1,28 @@
 #![allow(deprecated)]
 
 mod gis_camera;
-// mod gis_event;
-// mod gis_id;
-// mod gis_layers;
+mod gis_event;
+mod gis_layer_id;
+mod gis_layers;
 
 use ::bevy::{
     prelude::{App, Color},
     window::{WindowDescriptor, WindowPlugin},
 };
 
-use bevy::app::CoreStage;
-use bevy::ecs::entity::Entities;
-use bevy::prelude::{GlobalTransform, IntoSystemDescriptor, Query, With};
-use bevy::sprite::{Material2d, Mesh2dHandle};
-use bevy::transform::TransformSystem;
 use bevy::{
     prelude::{
-        AssetServer, Assets, ClearColor, Commands, EventWriter, Mesh, Res, ResMut, SpatialBundle,
-        Vec3,
+        AssetServer, Assets, ClearColor, Commands, Mesh, Res, ResMut,
     },
-    render::view::RenderLayers,
-    sprite::{Anchor, ColorMaterial, MaterialMesh2dBundle, Sprite, SpriteBundle},
-    window::Windows,
+    sprite::{ColorMaterial, MaterialMesh2dBundle, Sprite, SpriteBundle},
 };
-use bevy_asset::Handle;
 
 // use crate::gis_camera::MyCameraPlugin;
 // use crate::gis_event::*;
-use geo::Rect;
 use geo_bevy::{build_bevy_meshes, BuildBevyMeshesContext};
-use geo_types::Coord;
 use gis_test::{read_geojson, read_geojson_feature_collection};
 use proj::Transform;
-use proj::{Area, Proj};
+use proj::Proj;
 
 fn main() {
     let mut app = App::new();    
@@ -47,7 +36,6 @@ fn main() {
         },
         ..Default::default()
     });
-
 
     // resources
     app.insert_resource(ClearColor(Color::rgb(255., 255., 255.)));
@@ -63,28 +51,18 @@ fn main() {
     app.add_plugin(bevy::core_pipeline::CorePipelinePlugin::default());
     app.add_plugin(bevy::transform::TransformPlugin::default());
     app.add_plugin(bevy::sprite::SpritePlugin::default());
-    // app.add_plugin(MyCameraPlugin);
 
     // events
-    // app.add_event::<MeshSpawnedEvent>();
-    // app.add_event::<ZoomEvent>();
 
     // systems
     app.add_startup_system(building_meshes);
-    app.add_system_to_stage(
-         CoreStage::PostUpdate,
-         handle_global_transform.after(TransformSystem::TransformPropagate),
-    );
-    app.add_system(handle_global_transform);
 
     // run
     app.run();
 }
 
 fn building_meshes(
-    windows: Res<Windows>,
     asset_server: Res<AssetServer>,
-    // mut spawned_mesh_event: EventWriter<MeshSpawnedEvent>,
     mut commands: Commands,
     mut assets_meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
@@ -110,19 +88,16 @@ fn building_meshes(
         let result = projection_geometry(geom.clone().into(), proj);
 
         println!("coord before projection: {:?}", geom);
-        println!("coord before projection: {:?}", result);
+        println!("coord after projection: {:?}", result);
 
-
-        let mesh_iter = build_bevy_meshes(&result, Color::RED, BuildBevyMeshesContext::new())
+        let mesh_iter = build_bevy_meshes(&geom, Color::RED, BuildBevyMeshesContext::new())
             .unwrap()
             .collect::<Vec<_>>();
 
         for prepared_mesh in mesh_iter {
             match prepared_mesh {
-                geo_bevy::PreparedMesh::Point(points) => {
+                geo_bevy::GeometryMesh::Point(points) => {
                     for geo::Point(coord) in points.iter() {
-                        // spawned_mesh_event
-                        //     .send(MeshSpawnedEvent(SpawnedBundle::Points(points.clone())));
                         println!("Coord before transformation {:?}", coord);
 
                         let color = Color::RED;
@@ -143,8 +118,7 @@ fn building_meshes(
                         commands.spawn(bundle);
                     }
                 }
-                geo_bevy::PreparedMesh::Polygon { mesh, color } => {
-                    // spawned_mesh_event.send(MeshSpawnedEvent(SpawnedBundle::Mesh(mesh.clone())));
+                geo_bevy::GeometryMesh::Polygon { mesh, color } => {
                     println!("Inside Polygon, topology:{:?}", mesh.primitive_topology());
                     let material = materials.add(color.into());
 
@@ -152,23 +126,18 @@ fn building_meshes(
                         material,
                         mesh: bevy::sprite::Mesh2dHandle(assets_meshes.add(mesh.clone())),
                         transform: bevy::prelude::Transform::from_xyz(0., 0., 0.),
-                        // .with_scale(Vec3::splat(128.)),
                         visibility: bevy::render::view::Visibility { is_visible: true },
                         ..Default::default()
                     });
                 }
-                geo_bevy::PreparedMesh::LineString { mesh, color } => {
-                    // spawned_mesh_event.send(MeshSpawnedEvent(SpawnedBundle::Mesh(mesh.clone())));
-                    // let Some(bevy::render::mesh::VertexAttributeValues::Float32x4(vert_attr)) =
-                    // mesh.attribute(Mesh::ATTRIBUTE_POSITION);
-                    println!("Inside Polygon, topology:{:?}", mesh.primitive_topology());
+                geo_bevy::GeometryMesh::LineString{mesh, color} => {
+                    println!("Inside LineString, topology:{:?}", mesh.primitive_topology());
                     let material = materials.add(color.into());
 
                     commands.spawn(MaterialMesh2dBundle {
                         material,
                         mesh: bevy::sprite::Mesh2dHandle(assets_meshes.add(mesh)),
                         transform: bevy::prelude::Transform::from_xyz(0., 0., 0.),
-                        // .with_scale(Vec3::splat(128.)),
                         visibility: bevy::render::view::Visibility { is_visible: true },
                         ..Default::default()
                     });
@@ -195,40 +164,3 @@ fn projection_geometry(geom: geo_types::Geometry, proj: Proj) -> geo_types::Geom
         _ => unimplemented!(),
     }
 }
-
-type CameraGlobalTransformQuery<'world, 'state, 'a> = Query<
-    'world,
-    'state,
-    &'a bevy::transform::components::GlobalTransform,
-    (
-        bevy::ecs::query::With<bevy::render::camera::Camera>,
-        bevy::ecs::query::Changed<bevy::transform::components::GlobalTransform>,
-    ),
->;
-
-fn handle_global_transform(
-    query: CameraGlobalTransformQuery,
-    mut sprite_bundle_query: Query<&mut Sprite>,
-) {
-    if let Ok(camera_global_transform) = query.get_single() {
-        let (scale, _, _) = camera_global_transform.to_scale_rotation_translation();
-
-        for mut sprite in &mut sprite_bundle_query {
-            sprite.custom_size = Some(scale.truncate() * 5.);
-        }
-    }
-}
-
-// fn update_global_transform(
-//     query: CameraGlobalTransformQuery,
-//     mesh: Query<&MaterialMesh2dBundle<Handle<ColorMaterial>>>,
-// ) {
-//     if let Ok(global_transform) = query.get_single() {
-//         let (scale, _, _) = global_transform.to_scale_rotation_translation();
-//         println!("Scale -> {:?}", scale);
-//         println!("Scale truncate -> {:?}", scale.truncate());
-//     }
-//
-//     // let gxf = query.get_single().unwrap();
-//     // println!("Entity at: {:?}", gxf.translation());
-// }
