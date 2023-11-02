@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use super::{Offset, Scale};
-use crate::gis_event::*;
+use crate::gis_event::{*, self};
 
 pub fn system_set() -> bevy::ecs::schedule::SystemSet {
     bevy::ecs::schedule::SystemSet::new()
@@ -52,8 +52,9 @@ fn handle_meshes_spawned_event(
     mut meshes_spawned_event_reader: bevy::ecs::event::EventReader<MeshSpawnedEvent>,
     mut center_camera_event_writer: bevy::ecs::event::EventWriter<CenterCameraEvent>,
 ) {
+    print!("inside handle_meshes_spawned_event function");
     for event in meshes_spawned_event_reader.iter() {
-            center_camera_event_writer.send(event.0.into());
+            center_camera_event_writer.send(gis_event::CenterCameraEvent(event.0));
     }
 }
 

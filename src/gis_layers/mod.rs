@@ -34,35 +34,23 @@ impl AllLayers{
         self.layers.len()
     }
 
-    pub fn containing_coord(
-        &self,
-        coord: geo::Coord,
-    ) -> impl Iterator<Item = &Layer>{
-        self.iter_top_to_bottom()
-            .filter(move |layer| match layer.geom_type{
-                Some(ref geom) => geom.as_ref().contains(&coord),
-                None => false,
-            })
-    }
-
     fn next_layer_id(&self) -> LayerId {
         LayerId::new()
     }
 
-    fn add(
+    pub fn add(
         &mut self,
-        coord: geo::Coord,
+        geometry: geo_types::Geometry,
         name: String,
         crs: String,
     ) -> Result<LayerId, Error>{
         let id = self.next_layer_id();
-        let geom_type = geo_geom_type::determine(coord.as_raw().geometry_iter());
         let layer = Layer{
             id,
             name,
             crs,
-            geom_type,
             visible: false,
+            geom_type: geometry,
         };
 
         self.layers.push(layer);
@@ -71,5 +59,9 @@ impl AllLayers{
 
     pub fn iter(&self) -> impl Iterator<Item = &Layer> {
         self.layers.iter()
+    }
+
+    pub fn last_layer_id(&self) -> i32{
+        self.layers.last().unwrap().id.get_id()
     }
 }

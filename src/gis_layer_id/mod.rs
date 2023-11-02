@@ -5,15 +5,11 @@ clippy::unimplemented,
 clippy::indexing_slicing,
 clippy::expect_used
 )]
-use std::{num, sync};
-
-// The starting value is `1` so we can utilize `NonZeroU16`.
-static NEXT_ID: sync::atomic::AtomicU16 = sync::atomic::AtomicU16::new(1);
 
 #[derive(
 Copy, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash, bevy::ecs::component::Component,
 )]
-pub struct LayerId(num::NonZeroU16);
+pub struct LayerId(i32);
 
 impl Default for LayerId {
     fn default() -> Self {
@@ -23,11 +19,14 @@ impl Default for LayerId {
 
 impl LayerId {
     pub fn new() -> Self {
-        LayerId(new_id())
+        LayerId(0)
+    }
+
+    pub fn get_id(&self) -> i32 {
+        self.0
     }
 }
 
-fn new_id() -> num::NonZeroU16 {
-    // Unsafety: The starting ID is 1 and we always increment.
-    unsafe { num::NonZeroU16::new_unchecked(NEXT_ID.fetch_add(1, sync::atomic::Ordering::SeqCst)) }
+pub fn new_id(last: i32) -> i32 {
+    last+1
 }

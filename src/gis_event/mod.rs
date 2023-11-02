@@ -67,6 +67,6 @@ impl bevy::app::Plugin for Plugin{
         app.add_event::<CenterCameraEvent>()
             .add_event::<MeshSpawnedEvent>()
             .add_event::<PanCameraEvent>()
-            .add_event::<ZoomCameraEvent>()
+            .add_event::<ZoomCameraEvent>();
     }
 }

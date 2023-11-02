@@ -17,8 +17,8 @@ use bevy::{
     sprite::{ColorMaterial, MaterialMesh2dBundle, Sprite, SpriteBundle},
 };
 
-// use crate::gis_camera::MyCameraPlugin;
-// use crate::gis_event::*;
+use crate::{gis_layers::*, gis_event::MeshSpawnedEvent};
+use crate::gis_camera::*;
 use geo_bevy::{build_bevy_meshes, BuildBevyMeshesContext};
 use gis_test::{read_geojson, read_geojson_feature_collection};
 use proj::Transform;
@@ -53,6 +53,13 @@ fn main() {
     app.add_plugin(bevy::sprite::SpritePlugin::default());
 
     // events
+    app.add_event::<gis_event::CenterCameraEvent>();
+    app.add_event::<gis_event::CreateLayerEventReader>();
+    app.add_event::<gis_event::CreateLayerEventWriter>();
+    app.add_event::<gis_event::MeshSpawnedEvent>();
+    app.add_event::<gis_event::PanCameraEvent>();
+    app.add_event::<gis_event::PanCameraEvent>();
+    app.add_event::<gis_event::ZoomCameraEvent>();
 
     // systems
     app.add_startup_system(building_meshes);
@@ -66,38 +73,46 @@ fn building_meshes(
     mut commands: Commands,
     mut assets_meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
+    mut meshes_spawned_event_writer: bevy::ecs::event::EventWriter<MeshSpawnedEvent>
 ) {
     commands.spawn(bevy::prelude::Camera2dBundle {
         transform: bevy::prelude::Transform::from_xyz(0.0, 0.0, 999.9),
         ..Default::default()
     });
 
+    let mut layers = gis_layers::AllLayers::new();
     let feature_collection =
-        read_geojson_feature_collection(read_geojson("maps/only_point.geojson".to_owned()));
+        read_geojson_feature_collection(read_geojson("maps/only_polygon.geojson".to_owned()));
 
     //proj instances
     let from = "EPSG:4326";
     let to = "EPSG:3875";
+    
+    let mut last_id = 0;
 
     for feature in feature_collection {
         let geometry = feature.geometry.unwrap();
         let geom: geo_types::geometry::Geometry<f64> = geometry.try_into().unwrap();
 
         // convert geom to proj format
+        let mut new_geom:geo::Geometry = geom.clone().try_into().unwrap();
         let proj = Proj::new_known_crs(&from, &to, None).unwrap();
-        let result = projection_geometry(geom.clone().into(), proj);
+        //new_geom.transform(&proj).unwrap();
+        //let geom_projected = projection_geometry(new_geom.into(), proj);
 
         println!("coord before projection: {:?}", geom);
-        println!("coord after projection: {:?}", result);
+        //println!("coord after projection: {:?}", geom_projected);
 
-        let mesh_iter = build_bevy_meshes(&geom, Color::RED, BuildBevyMeshesContext::new())
+        let mesh_iter = build_bevy_meshes(&new_geom, Color::RED, BuildBevyMeshesContext::new())
             .unwrap()
             .collect::<Vec<_>>();
+                        
+        layers.add(new_geom, "mesh".to_owned(), to.to_owned());
 
         for prepared_mesh in mesh_iter {
             match prepared_mesh {
-                geo_bevy::GeometryMesh::Point(points) => {
-                    for geo::Point(coord) in points.iter() {
+                geo_bevy::PreparedMesh::Point(points) => {
+                     for geo::Point(coord) in points.iter() {
                         println!("Coord before transformation {:?}", coord);
 
                         let color = Color::RED;
@@ -116,9 +131,12 @@ fn building_meshes(
                         };
 
                         commands.spawn(bundle);
+                        last_id = layers.last_layer_id();
+                        let meshes_spawned = MeshSpawnedEvent(gis_layer_id::new_id(last_id));
+                        meshes_spawned_event_writer.send(meshes_spawned);
                     }
                 }
-                geo_bevy::GeometryMesh::Polygon { mesh, color } => {
+                geo_bevy::PreparedMesh::Polygon { mesh, color } => {
                     println!("Inside Polygon, topology:{:?}", mesh.primitive_topology());
                     let material = materials.add(color.into());
 
@@ -129,8 +147,11 @@ fn building_meshes(
                         visibility: bevy::render::view::Visibility { is_visible: true },
                         ..Default::default()
                     });
+                    last_id = layers.last_layer_id();
+                    let meshes_spawned = MeshSpawnedEvent(gis_layer_id::new_id(last_id));
+                    meshes_spawned_event_writer.send(meshes_spawned);
                 }
-                geo_bevy::GeometryMesh::LineString{mesh, color} => {
+                geo_bevy::PreparedMesh::LineString{mesh, color} => {
                     println!("Inside LineString, topology:{:?}", mesh.primitive_topology());
                     let material = materials.add(color.into());
 
@@ -141,6 +162,9 @@ fn building_meshes(
                         visibility: bevy::render::view::Visibility { is_visible: true },
                         ..Default::default()
                     });
+                    last_id = layers.last_layer_id();
+                    let meshes_spawned = MeshSpawnedEvent(gis_layer_id::new_id(last_id));
+                    meshes_spawned_event_writer.send(meshes_spawned);
                 }
             }
         }
