@@ -4,7 +4,6 @@ use crate::gis_layer_id::*;
 pub struct Layer{
     pub id: LayerId,
     pub name: String,
-    pub crs: String,
     pub geom_type: geo_types::Geometry,
     pub visible: bool,
 }
@@ -42,13 +41,11 @@ impl AllLayers{
         &mut self,
         geometry: geo_types::Geometry,
         name: String,
-        crs: String,
     ) -> Result<LayerId, Error>{
         let id = self.next_layer_id();
         let layer = Layer{
             id,
             name,
-            crs,
             visible: false,
             geom_type: geometry,
         };
