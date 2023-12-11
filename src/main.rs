@@ -24,7 +24,7 @@ use bevy::{
     render::{camera::{CameraProjection, OrthographicProjection, Camera, ScalingMode}, primitives::Aabb},
     sprite::{ColorMaterial, MaterialMesh2dBundle, Sprite, SpriteBundle},
     transform::components::{GlobalTransform, Transform},
-    window::{Window, Windows},
+    window::{Window, Windows, WindowMode},
     winit::UpdateMode, time::Time,
 };
 
@@ -51,6 +51,7 @@ fn main() {
     app.add_plugins(bevy::MinimalPlugins);
     app.add_plugin(WindowPlugin {
         window: WindowDescriptor {
+            mode: WindowMode::BorderlessFullscreen,
             title: "gis_test".to_string(),
             ..Default::default()
         },
@@ -85,7 +86,7 @@ fn setup(
 ) {
     let mut layers = gis_layers::AllLayers::new();
     let feature_collection =
-        read_geojson_feature_collection(read_geojson("maps/map.geojson".to_owned()));
+        read_geojson_feature_collection(read_geojson("maps/only_polygon.geojson".to_owned()));
     let mut last_id = 0;
     let mut i = 0;
     let mut iteration = 0;
@@ -140,7 +141,7 @@ fn setup(
                         z_index as f32,
                     ));
 
-                    transform.scale /= 1.25;
+                    // transform.scale /= 1.25;
 
                     commands
                         .spawn(MaterialMesh2dBundle {
@@ -163,7 +164,7 @@ fn setup(
                         z_index as f32,
                     ));
 
-                    transform.scale /= 1.25;
+                    // transform.scale /= 1.25;
 
                     commands
                         .spawn(MaterialMesh2dBundle {
@@ -180,7 +181,8 @@ fn setup(
         if iteration == 0 {
             commands.spawn(Camera2dBundle {
                 projection: OrthographicProjection{
-                    scale: -0.1,
+                    scaling_mode: ScalingMode::Auto { min_width: (100.), min_height: (100.) },
+                    // scale: -0.1,
                     ..Default::default()
                 },
                 transform: Transform::from_xyz(centroid.0.x as f32, centroid.0.y as f32, 999.9),
