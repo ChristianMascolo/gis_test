@@ -10,8 +10,6 @@ geo-bevy = "0.3.0"
 bevy = "0.9.1"
 bevy-inspector-egui = "0.17.0"
 bevy_asset = "0.10.1"
-bevy_mod_raycast = "0.7.0"
-proj = {version = "0.27.0", features = ["geo-types"]}
 geo-types = "0.7.8"
 geo = "0.26"
 geojson = { version = "*", features = ["geo-types"] }
