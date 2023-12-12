@@ -10,22 +10,11 @@ use ::bevy::{
 
 use bevy::{
     core_pipeline::core_2d::Camera2dBundle,
-    ecs::{
-        component::Component,
-        entity::Entity,
-        query::With,
-        reflect::ReflectComponent,
-        system::{Query, Resource},
-        world::World,
-    },
-    math::{Mat4, Vec2, Vec3},
+    math::Vec3,
     prelude::{AssetServer, Assets, ClearColor, Commands, Mesh, Res, ResMut},
-    reflect::{std_traits::ReflectDefault, Reflect},
-    render::{camera::{CameraProjection, OrthographicProjection, Camera, ScalingMode}, primitives::Aabb},
     sprite::{ColorMaterial, MaterialMesh2dBundle, Sprite, SpriteBundle},
-    transform::components::{GlobalTransform, Transform},
-    window::{Window, Windows},
-    winit::UpdateMode, time::Time,
+    transform::components:: Transform,
+    window::Windows,
 };
 
 use bevy_inspector_egui::bevy_egui::EguiPlugin;
@@ -33,6 +22,8 @@ use bevy_inspector_egui::bevy_inspector;
 
 use geo::Centroid;
 use geo_bevy::{build_bevy_meshes, BuildBevyMeshesContext};
+use geo_types::Point;
+use gis_layers::AllLayers;
 use gis_test::{read_geojson, read_geojson_feature_collection};
 
 enum MeshType {
@@ -71,7 +62,6 @@ fn main() {
     // systems
     app.add_startup_system(setup);
     app.add_system(inspector_ui);
-    //app.add_system(follow_entities);
 
     // run
     app.run();
@@ -79,34 +69,33 @@ fn main() {
 
 fn setup(
     asset_server: Res<AssetServer>,
+    windows: ResMut<Windows>,
     mut commands: Commands,
     mut assets_meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
     let mut layers = gis_layers::AllLayers::new();
     let feature_collection =
-        read_geojson_feature_collection(read_geojson("maps/map.geojson".to_owned()));
-    let mut last_id = 0;
+        read_geojson_feature_collection(read_geojson("maps/all_geometry.geojson".to_owned()));
     let mut i = 0;
-    let mut iteration = 0;
-    
+    let primary_window = windows.get_primary().unwrap();
+
     for feature in feature_collection {
         let geometry = feature.geometry.unwrap();
         let geom: geo_types::geometry::Geometry<f64> = geometry.try_into().unwrap();
-        let centroid = geom.centroid().unwrap();
 
         let mesh_iter = build_bevy_meshes(&geom, Color::RED, BuildBevyMeshesContext::new())
             .unwrap()
             .collect::<Vec<_>>();
 
         let _ = layers.add(geom, "mesh".to_owned());
-
+        
         for prepared_mesh in mesh_iter {
             match prepared_mesh {
                 geo_bevy::PreparedMesh::Point(points) => {
                     for geo::Point(coord) in points.iter() {
                         let color = Color::RED;
-                        last_id = layers.last_layer_id();
+                        let last_id = layers.last_layer_id();
                         let z_index = calculate_z(last_id, MeshType::Point) + i;
                         let transform = bevy::prelude::Transform::from_xyz(
                             coord.x as f32,
@@ -130,64 +119,46 @@ fn setup(
                 }
 
                 geo_bevy::PreparedMesh::Polygon { mesh, color } => {
-                    last_id = layers.last_layer_id();
-
+                    let last_id = layers.last_layer_id();
                     let material = materials.add(color.into());
                     let z_index = calculate_z(last_id, MeshType::Polygon);
-                    let mut transform = bevy::prelude::Transform::from_translation(Vec3::new(
+                    let transform = bevy::prelude::Transform::from_translation(Vec3::new(
                         0.,
                         0.,
                         z_index as f32,
                     ));
 
-                    transform.scale /= 1.25;
-
-                    commands
-                        .spawn(MaterialMesh2dBundle {
-                            material,
-                            mesh: bevy::sprite::Mesh2dHandle(assets_meshes.add(mesh.clone())),
-                            transform: transform,
-                            visibility: bevy::render::view::Visibility { is_visible: true },
-                            ..Default::default()
-                        });
+                    commands.spawn(MaterialMesh2dBundle {
+                        material,
+                        mesh: bevy::sprite::Mesh2dHandle(assets_meshes.add(mesh.clone())),
+                        transform: transform,
+                        visibility: bevy::render::view::Visibility { is_visible: true },
+                        ..Default::default()
+                    });
                 }
 
                 geo_bevy::PreparedMesh::LineString { mesh, color } => {
-                    last_id = layers.last_layer_id();
-
+                    let last_id = layers.last_layer_id();
                     let material = materials.add(color.into());
                     let z_index = calculate_z(last_id, MeshType::LineString);
-                    let mut transform = bevy::prelude::Transform::from_translation(Vec3::new(
+                    let transform = bevy::prelude::Transform::from_translation(Vec3::new(
                         0.,
                         0.,
                         z_index as f32,
                     ));
 
-                    transform.scale /= 1.25;
-
-                    commands
-                        .spawn(MaterialMesh2dBundle {
-                            material,
-                            mesh: bevy::sprite::Mesh2dHandle(assets_meshes.add(mesh.clone())),
-                            transform: transform,
-                            visibility: bevy::render::view::Visibility { is_visible: true },
-                            ..Default::default()
-                        });
+                    commands.spawn(MaterialMesh2dBundle {
+                        material,
+                        mesh: bevy::sprite::Mesh2dHandle(assets_meshes.add(mesh.clone())),
+                        transform: transform,
+                        visibility: bevy::render::view::Visibility { is_visible: true },
+                        ..Default::default()
+                    });
                 }
             }
         }
-
-        if iteration == 0 {
-            commands.spawn(Camera2dBundle {
-                projection: OrthographicProjection{
-                    scale: -0.1,
-                    ..Default::default()
-                },
-                transform: Transform::from_xyz(centroid.0.x as f32, centroid.0.y as f32, 999.9),
-                ..Default::default()
-            });
-        }
     }
+    commands.spawn(create_camera(get_all_centroids(layers),primary_window.width(),primary_window.height()));
 }
 
 fn calculate_z(layer_index: i32, mesh_type: MeshType) -> i32 {
@@ -199,7 +170,7 @@ fn calculate_z(layer_index: i32, mesh_type: MeshType) -> i32 {
         };
 }
 
-fn inspector_ui(world: &mut World) {
+fn inspector_ui(world: &mut bevy::ecs::world::World) {
     let egui_context = world
         .resource_mut::<bevy_inspector_egui::bevy_egui::EguiContext>()
         .ctx_mut()
@@ -217,7 +188,48 @@ fn inspector_ui(world: &mut World) {
             bevy_inspector_egui::egui::CollapsingHeader::new("Materials").show(ui, |ui| {
                 bevy_inspector::ui_for_assets::<bevy::pbr::StandardMaterial>(world, ui);
             });
-
         });
     });
+}
+
+fn get_all_centroids(layers: AllLayers) -> Vec<Point>{
+    let mut centroids: Vec<Point> = Vec::new();
+
+    for layer in layers.iter(){
+        let geom = &layer.geom_type;
+        centroids.push(geom.centroid().unwrap());
+    }
+
+    centroids
+}
+
+fn create_camera(centroids: Vec<Point>, win_width: f32, win_height: f32) -> Camera2dBundle{
+    let center = medium_centroid(centroids);
+    //let min_width = (win_width - center.0.x as  f32) / 2.;
+    //let min_height = (win_height - center.0.y as  f32) / 2.;
+
+    Camera2dBundle {
+        projection: bevy::render::camera::OrthographicProjection {
+            scaling_mode: bevy::render::camera::ScalingMode::Auto {
+                min_width:  win_width / 2.,
+                min_height:  win_height / 2.
+            },
+            scale: 0.001,
+            ..Default::default()
+        },
+        transform: Transform::from_xyz(center.0.x as f32, center.0.y as f32, 999.9),
+        ..Default::default()
+    }
+}
+
+fn medium_centroid(centroids: Vec<Point>) -> Point{
+    let mut somma_x = 0.0;
+    let mut somma_y = 0.0;
+
+    for centroid in centroids.clone(){
+        somma_x += centroid.0.x;
+        somma_y += centroid.0.y;
+    }
+
+    Point::new(somma_x / centroids.len() as f64, somma_y / centroids.len() as f64)
 }

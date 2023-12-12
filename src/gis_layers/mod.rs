@@ -21,20 +21,8 @@ impl AllLayers{
         }
     }
 
-    pub fn iter_bottom_to_top(&self) -> impl Iterator<Item = &Layer>{
-        self.layers.iter()
-    }
-
-    pub fn iter_top_to_bottom(&self) -> impl Iterator<Item = &Layer>{
-            self.layers.iter().rev()
-    }
-
-    pub fn count(&self) -> usize {
-        self.layers.len()
-    }
-
     fn next_layer_id(&self) -> LayerId {
-        LayerId::new()
+        LayerId::new(self.last_layer_id())
     }
 
     pub fn add(
@@ -59,6 +47,8 @@ impl AllLayers{
     }
 
     pub fn last_layer_id(&self) -> i32{
+        if self.layers.len() == 0 { return 0; }
+
         self.layers.last().unwrap().id.get_id()
     }
 }
