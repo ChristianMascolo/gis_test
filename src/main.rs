@@ -42,7 +42,6 @@ fn main() {
     app.add_plugins(bevy::MinimalPlugins);
     app.add_plugin(WindowPlugin {
         window: WindowDescriptor {
-            mode: bevy::window::WindowMode::BorderlessFullscreen,
             title: "gis_test".to_string(),
             ..Default::default()
         },
