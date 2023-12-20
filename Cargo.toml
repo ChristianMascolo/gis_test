@@ -10,6 +10,7 @@ geo-bevy = "0.3.0"
 bevy = "0.9.1"
 bevy-inspector-egui = "0.17.0"
 bevy_asset = "0.10.1"
+bevy_prototype_lyon="0.7.0"
 geo-types = "0.7.8"
 geo = "0.26"
 geojson = { version = "*", features = ["geo-types"] }
