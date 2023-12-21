@@ -68,8 +68,9 @@ fn main() {
 fn setup(mut commands: Commands) {
     let mut layers = gis_layers::AllLayers::new();
     let feature_collection = read_geojson_feature_collection(read_geojson(
-        "C:/Users/masco/gis_test-1/maps/polygon_and_line.geojson".to_owned(),
+        "C:/Users/masco/gis_test-1/maps/ikea_polygon                     .geojson".to_owned(),
     ));
+    let mut camera_bundle = Camera2dBundle::default();
 
     for feature in feature_collection {
         let geometry = feature.geometry.unwrap();
@@ -78,31 +79,35 @@ fn setup(mut commands: Commands) {
         match geom {
             Geometry::Polygon(_) => {
                 let mut coords = Vec::new();
+                let z = calculate_z(layers.last_layer_id(), MeshType::Polygon);
 
                 for coord in geom.coords_iter() {
-                    coords.push((coord.x as f32, coord.y as f32).into())
+                    let logical_coords = camera_bundle.camera.to_logical(Vec2::new(coord.x, coord.y));
+                    
+                    println!("non normalizzate -> x:{:?} y:{:?}",coord.x,coord.y);
+                    println!("logic coord -> x:{:?} y:{:?}",logical_coords.x,logical_coords.y);
+
+                    coords.push((logical_coords.x , logical_coords.x).into());
                 }
 
-                if coords.len() == 2 {
-                    let shape = bevy_prototype_lyon::shapes::Polygon {
-                        points: coords,
-                        closed: true,
-                    };
+                let shape = bevy_prototype_lyon::shapes::Polygon {
+                    points: coords,
+                    closed: true,
+                };
 
-                    let builder = GeometryBuilder::new().add(&shape);
-                    let _ = layers.add(geom.clone(), "Polygon".to_owned());
-                    let translation = Vec3 {
-                        x: 0.,
-                        y: 0.,
-                        z: calculate_z(layers.last_layer_id(), MeshType::Polygon),
-                    };
+                let builder = GeometryBuilder::new().add(&shape);
+                let _ = layers.add(geom.clone(), "Polygon".to_owned());
+                let translation = Vec3 {
+                    x: 0.,
+                    y: 0.,
+                    z: z,
+                };
 
-                    commands.spawn(GeometryBuilder::build_as(
-                        &shape,
-                        DrawMode::Stroke(StrokeMode::color(Color::ORANGE_RED)),
-                        Transform::from_translation(translation),
-                    ));
-                }
+                commands.spawn(GeometryBuilder::build_as(
+                    &shape,
+                    DrawMode::Stroke(StrokeMode::color(Color::ORANGE_RED)),
+                    Transform::from_translation(translation),
+                ));
             }
             Geometry::LineString(_) => {
                 let mut coords: Vec<Point> = Vec::new();
@@ -116,12 +121,12 @@ fn setup(mut commands: Commands) {
 
                 let shape = shapes::Line(
                     Vec2 {
-                        x: start.x() as f32,
-                        y: start.y() as f32,
+                        x: start.0.x as f32,
+                        y: start.0.y as f32,
                     },
                     Vec2 {
-                        x: last.x() as f32,
-                        y: last.y() as f32,
+                        x: last.0.x as f32,
+                        y: last.0.y as f32,
                     },
                 );
 
@@ -136,7 +141,7 @@ fn setup(mut commands: Commands) {
                 commands.spawn(builder.build(
                     DrawMode::Outlined {
                         fill_mode: FillMode::color(Color::ORANGE_RED),
-                        outline_mode: StrokeMode::new(Color::ORANGE_RED, 0.5),
+                        outline_mode: StrokeMode::new(Color::ORANGE_RED, 0.1),
                     },
                     Transform::from_translation(translation),
                 ));
@@ -144,20 +149,19 @@ fn setup(mut commands: Commands) {
             Geometry::Point(_) => {
                 let centroid = geom.centroid().unwrap();
                 let shape = shapes::Circle {
-                    radius: 1.,
+                    radius: 0.5,
                     center: Vec2::new(centroid.x() as f32, centroid.y() as f32),
                 };
                 let builder = GeometryBuilder::new().add(&shape);
                 let _ = layers.add(geom.clone(), "point(s)".to_owned());
                 let z = calculate_z(layers.last_layer_id(), MeshType::Point);
-                //let translation = Vec3 { x: centroid.x() as f32 , y: centroid.y() as f32, z: z };
 
                 commands.spawn(builder.build(
                     DrawMode::Outlined {
                         fill_mode: FillMode::color(Color::ORANGE_RED),
                         outline_mode: StrokeMode::color(Color::ORANGE_RED),
                     },
-                    Transform::from_xyz(centroid.x() as f32, centroid.y() as f32, z),
+                    Transform::from_xyz(0., 0. , z),
                 ));
             }
             Geometry::Line(_) => {
@@ -193,7 +197,19 @@ fn setup(mut commands: Commands) {
         }
     }
 
-    commands.spawn(create_camera(get_all_centroids(layers)));
+    let center = medium_centroid(get_all_centroids(layers));
+
+    camera_bundle.projection = bevy::render::camera::OrthographicProjection {
+        near: 0.,
+        far: 1000.,
+        scaling_mode: bevy::render::camera::ScalingMode::WindowSize,
+        scale: 0.1,
+        ..Default::default()
+    };
+
+    camera_bundle.transform = Transform::from_xyz(center.0.x as f32, center.0.y as f32, 999.9);
+
+    commands.spawn(camera_bundle);
 }
 
 fn calculate_z(layer_index: i32, mesh_type: MeshType) -> f32 {
@@ -236,22 +252,6 @@ fn get_all_centroids(layers: AllLayers) -> Vec<Point> {
     }
 
     centroids
-}
-
-fn create_camera(centroids: Vec<Point>) -> Camera2dBundle {
-    let center = medium_centroid(centroids.clone());
-    let mut camera_bundle = Camera2dBundle::default();
-
-    camera_bundle.projection = bevy::render::camera::OrthographicProjection {
-        near: 0.,
-        far: 1000.,
-        scaling_mode: bevy::render::camera::ScalingMode::WindowSize,
-        scale: 0.2,
-        ..Default::default()
-    };
-    camera_bundle.transform = Transform::from_xyz(center.0.x as f32, center.0.y as f32, 999.9);
-
-    camera_bundle
 }
 
 fn medium_centroid(centroids: Vec<Point>) -> Point {
