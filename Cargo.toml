@@ -13,5 +13,6 @@ bevy_asset = "0.10.1"
 bevy_prototype_lyon="0.7.0"
 geo-types = "0.7.8"
 geo = "0.26"
+geozero = "0.11.0"
 geojson = { version = "*", features = ["geo-types"] }
-bevy_core_pipeline = "0.9.1"
+regex = "1.5.4"

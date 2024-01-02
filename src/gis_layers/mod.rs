@@ -29,7 +29,7 @@ impl AllLayers{
         &mut self,
         geometry: geo_types::Geometry,
         name: String,
-    ) -> Result<LayerId, Error>{
+    ){
         let id = self.next_layer_id();
         let layer = Layer{
             id,
@@ -39,7 +39,6 @@ impl AllLayers{
         };
 
         self.layers.push(layer);
-        Ok(id)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &Layer> {
