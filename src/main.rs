@@ -8,7 +8,6 @@ use ::bevy::{
 
 use bevy::{
     core_pipeline::core_2d::Camera2dBundle,
-    ecs::system::ResMut,
     math::{Vec2, Vec3},
     prelude::{ClearColor, Commands},
     transform::components::Transform,
@@ -18,9 +17,8 @@ use bevy_inspector_egui::bevy_egui::EguiPlugin;
 use bevy_inspector_egui::bevy_inspector;
 use bevy_prototype_lyon::prelude::*;
 
-use geo::{Area, BoundingRect, Centroid, CoordsIter, Scale};
-use geo_types::{Coord, Geometry, Point};
-use geojson::FeatureCollection;
+use geo::{ Centroid, CoordsIter, Scale};
+use geo_types::{Geometry, Point};
 use gis_layers::AllLayers;
 use gis_test::{read_geojson, read_geojson_feature_collection};
 
