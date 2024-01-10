@@ -8,25 +8,21 @@ use ::bevy::{
 
 use bevy::{
     core_pipeline::core_2d::Camera2dBundle,
+    ecs::system::ResMut,
     math::{Vec2, Vec3},
     prelude::{ClearColor, Commands},
-    transform::components::Transform, render::camera::OrthographicProjection,
+    transform::components::Transform,
 };
 
 use bevy_inspector_egui::bevy_egui::EguiPlugin;
 use bevy_inspector_egui::bevy_inspector;
-use bevy_prototype_lyon::{
-    entity::ShapeBundle,
-    prelude::{tess::path::traits::SvgPathBuilder, *},
-};
+use bevy_prototype_lyon::prelude::*;
 
-use geo::{Centroid, CoordsIter};
-use geo_types::{Geometry, Point};
-use geojson::{FeatureCollection, feature};
+use geo::{Area, BoundingRect, Centroid, CoordsIter, Scale};
+use geo_types::{Coord, Geometry, Point};
+use geojson::FeatureCollection;
 use gis_layers::AllLayers;
 use gis_test::{read_geojson, read_geojson_feature_collection};
-
-use geozero::{geojson::GeoJsonReader, ProcessToSvg};
 
 enum MeshType {
     Point,
@@ -71,157 +67,113 @@ fn main() {
 }
 
 fn setup(mut commands: Commands) {
-    let mut layers = gis_layers::AllLayers::new();
-    let geojson =
-        read_geojson("C:/Users/masco/gis_test-1/maps/polygon_and_line.geojson".to_owned());
+    let geojson = read_geojson("C:/Users/masco/gis_test-1/maps/polygon_point.geojson".to_owned());
     let feature_collection = read_geojson_feature_collection(geojson);
-    let mut camera_bundle = Camera2dBundle::default();
-    let f = std::fs::File::open("maps/polygon_and_line.geojson").unwrap();
-    let svg_string = GeoJsonReader(f).to_svg().unwrap();
-    let paths = all_path(svg_string);
+    let mut layers = gis_layers::AllLayers::new();
 
-    for path in paths{
-        let svg_shape = bevy_prototype_lyon::shapes::SvgPathShape {
-            svg_path_string: path.to_owned(),
-            svg_doc_size_in_px: Vec2::new(1., 1.),
-        };
-        let mode = DrawMode::Stroke(StrokeMode::new(Color::BLACK, 2.5));
-        let transform = Transform::default();
-
-        commands.spawn(GeometryBuilder::build_as(&svg_shape, mode, transform));
-    }
-
-    //
-    //for feature in feature_collection {
-    //    let geometry = feature.geometry.unwrap();
-    //    let geom: geo_types::geometry::Geometry<f64> = geometry.try_into().unwrap();
-    //
-    //    match geom {
-    //        Geometry::Polygon(_) => {
-    //            let mut coords = Vec::new();
-    //            let z = calculate_z(layers.last_layer_id(), MeshType::Polygon);
-    //
-    //            for coord in geom.coords_iter() {
-    //                coords.push(Vec2 {
-    //                    x: coord.x as f32,
-    //                    y: coord.y as f32,
-    //                });
-    //            }
-    //
-    //            let shape = bevy_prototype_lyon::shapes::Polygon {
-    //                points: coords,
-    //                closed: true,
-    //            };
-    //
-    //            let builder = GeometryBuilder::new().add(&shape);
-    //            let _ = layers.add(geom.clone(), "Polygon".to_owned());
-    //            let translation = Vec3 { x: 0., y: 0., z: z };
-    //
-    //            commands.spawn(GeometryBuilder::build_as(
-    //                &shape,
-    //                DrawMode::Stroke(StrokeMode::color(Color::ORANGE_RED)),
-    //                Transform::from_translation(translation),
-    //            ));
-    //        }
-    //        Geometry::LineString(_) => {
-    //            let mut coords: Vec<Point> = Vec::new();
-    //
-    //            for coord in geom.coords_iter() {
-    //                coords.push(Point::new(coord.x as f64, coord.y as f64))
-    //            }
-    //
-    //            let start = coords.get(0).unwrap();
-    //            let last = coords.last().unwrap();
-    //
-    //            let shape = shapes::Line(
-    //                Vec2 {
-    //                    x: start.0.x as f32,
-    //                    y: start.0.y as f32,
-    //                },
-    //                Vec2 {
-    //                    x: last.0.x as f32,
-    //                    y: last.0.y as f32,
-    //                },
-    //            );
-    //
-    //            if coords.len() == 2 {
-    //                let builder = GeometryBuilder::new().add(&shape);
-    //                let _ = layers.add(geom.clone(), "line_string".to_owned());
-    //                let translation = Vec3 {
-    //                    x: 0.,
-    //                    y: 0.,
-    //                    z: calculate_z(layers.last_layer_id(), MeshType::LineString),
-    //                };
-    //
-    //                commands.spawn(builder.build(
-    //                    DrawMode::Outlined {
-    //                        fill_mode: FillMode::color(Color::ORANGE_RED),
-    //                        outline_mode: StrokeMode::new(Color::ORANGE_RED, 0.1),
-    //                    },
-    //                    Transform::from_translation(translation),
-    //                ));
-    //            }
-    //        }
-    //        Geometry::Point(_) => {
-    //            let centroid = geom.centroid().unwrap();
-    //            let shape = shapes::Circle {
-    //                radius: 1.,
-    //                center: Vec2::new(centroid.x() as f32, centroid.y() as f32),
-    //            };
-    //            let builder = GeometryBuilder::new().add(&shape);
-    //            let _ = layers.add(geom.clone(), "point(s)".to_owned());
-    //            let z = calculate_z(layers.last_layer_id(), MeshType::Point);
-    //
-    //            commands.spawn(builder.build(
-    //                DrawMode::Outlined {
-    //                    fill_mode: FillMode::color(Color::ORANGE_RED),
-    //                    outline_mode: StrokeMode::color(Color::ORANGE_RED),
-    //                },
-    //                Transform::from_xyz(0., 0., z),
-    //            ));
-    //        }
-    //        _ => todo!(),
-    //    }
-    //}
-
-    //let center = medium_centroid(get_all_centroids(layers));
-    //
-    //camera_bundle.projection = bevy::render::camera::OrthographicProjection {
-    //    near: 0.,
-    //    far: 1000.,
-    //    scaling_mode: bevy::render::camera::ScalingMode::WindowSize,
-    //    scale: 0.1,
-    //    ..Default::default()
-    //};
-    //
-    //camera_bundle.transform = Transform::from_xyz(center.0.x as f32, center.0.y as f32, 999.9);
-
-    commands.spawn(setup_camera(layers, feature_collection));
-}
-
-fn setup_camera(mut layers: AllLayers, feature_collection: FeatureCollection)->Camera2dBundle{
-    let mut camera_bundle = Camera2dBundle::default();
-    let mut center = Point::default();
-
-    for feature in feature_collection{
+    for feature in feature_collection {
         let geometry = feature.geometry.unwrap();
-        let geom: geo_types::geometry::Geometry<f64> = geometry.try_into().unwrap();
-    
-        layers.add(geom, "name".to_owned());
+        let geom: geo::Geometry = geometry.try_into().unwrap();
+        let scaled_geom = geom.scale(50.);
+
+        match scaled_geom {
+            Geometry::Polygon(_) => {
+                let mut coords: Vec<Vec2> = Vec::new();
+
+                for coord in scaled_geom.coords_iter() {
+                    println!("Polygon x={:?} y={:?}", coord.x, coord.y);
+                    coords.push(Vec2 {
+                        x: coord.x as f32,
+                        y: coord.y as f32,
+                    });
+                }
+
+                let shape = bevy_prototype_lyon::shapes::Polygon {
+                    points: coords,
+                    closed: true,
+                };
+                let builder = GeometryBuilder::new().add(&shape);
+
+                layers.add(scaled_geom.clone(), "Polygon".to_owned());
+
+                let z = calculate_z(layers.last_layer_id(), MeshType::Polygon);
+                let translation = Vec3 { x: 0., y: 0., z };
+                let transform = Transform::from_translation(translation);
+
+                commands.spawn(builder.build(
+                    DrawMode::Outlined {
+                        fill_mode: FillMode::color(Color::ORANGE_RED),
+                        outline_mode: StrokeMode::new(Color::ORANGE_RED, 1.),
+                    },
+                    transform,
+                ));
+            }
+            Geometry::LineString(_) => {
+                let mut coords: Vec<Point> = Vec::new();
+
+                for coord in scaled_geom.coords_iter() {
+                    println!("LineString x={:?} y={:?}", coord.x, coord.y);
+                    coords.push(Point::new(coord.x as f64, coord.y as f64));
+                }
+
+                let start = coords.get(0).unwrap();
+                let last = coords.last().unwrap();
+
+                let shape = shapes::Line(
+                    Vec2 {
+                        x: start.0.x as f32,
+                        y: start.0.y as f32,
+                    },
+                    Vec2 {
+                        x: last.0.x as f32,
+                        y: last.0.y as f32,
+                    },
+                );
+
+                let builder = GeometryBuilder::new().add(&shape);
+                layers.add(scaled_geom.clone(), "line_string".to_owned());
+                let translation = Vec3 {
+                    x: 0.,
+                    y: 0.,
+                    z: calculate_z(layers.last_layer_id(), MeshType::LineString),
+                };
+                let transform = Transform::from_translation(translation);
+
+                commands.spawn(builder.build(
+                    DrawMode::Outlined {
+                        fill_mode: FillMode::color(Color::ORANGE_RED),
+                        outline_mode: StrokeMode::new(Color::ORANGE_RED, 0.1),
+                    },
+                    transform,
+                ));
+            }
+            Geometry::Point(_) => {
+                let centroid = scaled_geom.centroid().unwrap();
+
+                println!("Point x={:?} y={:?}", centroid.0.x, centroid.0.y);
+
+                let shape = shapes::Circle {
+                    radius: 1.,
+                    center: Vec2::new(centroid.0.x as f32, centroid.0.y as f32),
+                };
+                let builder = GeometryBuilder::new().add(&shape);
+                layers.add(scaled_geom.clone(), "point(s)".to_owned());
+                let z = calculate_z(layers.last_layer_id(), MeshType::Point);
+
+                commands.spawn(builder.build(
+                    DrawMode::Outlined {
+                        fill_mode: FillMode::color(Color::ORANGE_RED),
+                        outline_mode: StrokeMode::color(Color::ORANGE_RED),
+                    },
+                    Transform::from_xyz(0., 0., z),
+                ));
+            }
+            _ => todo!(),
+        }
     }
 
-    center = medium_centroid(get_all_centroids(layers));
-
-    camera_bundle.projection = OrthographicProjection{
-        scale: 0.4,
-        ..Default::default()
-    };
-
-    camera_bundle.transform = Transform::from_xyz(center.0.x as f32, center.0.y as f32, 999.9);
-
-    camera_bundle
+    commands.spawn(setup_camera(layers));
 }
-
 
 fn calculate_z(layer_index: i32, mesh_type: MeshType) -> f32 {
     return layer_index as f32 * 3.
@@ -280,8 +232,20 @@ fn medium_centroid(centroids: Vec<Point>) -> Point {
     )
 }
 
-fn all_path(svg_string: String) -> Vec<String>{
-    let re = regex::Regex::new(r#"(?s)(M.*?Z)"#).unwrap();
+fn setup_camera(layers: AllLayers) -> Camera2dBundle {
+    let mut camera = Camera2dBundle::default();
+    let center = medium_centroid(get_all_centroids(layers));
 
-    re.captures_iter(&svg_string).map(|cap| cap[0].to_string()).collect()
+    camera.projection = bevy::render::camera::OrthographicProjection {
+        near: 0.,
+        far: 1000.,
+        scaling_mode: bevy::render::camera::ScalingMode::WindowSize,
+        scale: 0.1,
+        ..Default::default()
+    };
+
+    camera.transform =
+        Transform::from_xyz(center.0.x as f32, center.0.y as f32, 999.9);
+
+    camera
 }

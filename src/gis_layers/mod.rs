@@ -1,6 +1,6 @@
-use bevy_asset::Error;
 use crate::gis_layer_id::*;
 
+#[derive(Clone)]
 pub struct Layer{
     pub id: LayerId,
     pub name: String,
@@ -8,8 +8,9 @@ pub struct Layer{
     pub visible: bool,
 }
 
+#[derive(Clone)]
 pub struct AllLayers{
-    layers: Vec<Layer>,
+    pub layers: Vec<Layer>,
     pub selected_layer_id: i32,
 }
 
