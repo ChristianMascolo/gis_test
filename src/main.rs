@@ -6,18 +6,13 @@ use ::bevy::{
     window::{WindowDescriptor, WindowPlugin},
 };
 
-use bevy::{
-    core_pipeline::core_2d::Camera2dBundle,
-    math::{Vec2, Vec3},
-    prelude::{ClearColor, Commands},
-    transform::components::Transform,
-};
+use bevy::prelude::*;
 
 use bevy_inspector_egui::bevy_egui::EguiPlugin;
 use bevy_inspector_egui::bevy_inspector;
 use bevy_prototype_lyon::prelude::*;
 
-use geo::{ Centroid, CoordsIter, Scale};
+use geo::{Centroid, CoordsIter};
 use geo_types::{Geometry, Point};
 use gis_layers::AllLayers;
 use gis_test::{read_geojson, read_geojson_feature_collection};
@@ -64,21 +59,24 @@ fn main() {
     app.run();
 }
 
-fn setup(mut commands: Commands) {
-    let geojson = read_geojson("C:/Users/masco/gis_test-1/maps/polygon_point.geojson".to_owned());
+fn setup(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+) {
+    let geojson = read_geojson("C:/Users/masco/gis_test-1/maps/test.geojson".to_owned());
     let feature_collection = read_geojson_feature_collection(geojson);
     let mut layers = gis_layers::AllLayers::new();
 
     for feature in feature_collection {
         let geometry = feature.geometry.unwrap();
         let geom: geo::Geometry = geometry.try_into().unwrap();
-        let scaled_geom = geom.scale(50.);
 
-        match scaled_geom {
+        match geom {
             Geometry::Polygon(_) => {
                 let mut coords: Vec<Vec2> = Vec::new();
 
-                for coord in scaled_geom.coords_iter() {
+                for coord in geom.coords_iter() {
                     println!("Polygon x={:?} y={:?}", coord.x, coord.y);
                     coords.push(Vec2 {
                         x: coord.x as f32,
@@ -92,7 +90,7 @@ fn setup(mut commands: Commands) {
                 };
                 let builder = GeometryBuilder::new().add(&shape);
 
-                layers.add(scaled_geom.clone(), "Polygon".to_owned());
+                layers.add(geom.clone(), "Polygon".to_owned());
 
                 let z = calculate_z(layers.last_layer_id(), MeshType::Polygon);
                 let translation = Vec3 { x: 0., y: 0., z };
@@ -100,8 +98,8 @@ fn setup(mut commands: Commands) {
 
                 commands.spawn(builder.build(
                     DrawMode::Outlined {
-                        fill_mode: FillMode::color(Color::ORANGE_RED),
-                        outline_mode: StrokeMode::new(Color::ORANGE_RED, 1.),
+                        fill_mode: FillMode::color(Color::BLUE),
+                        outline_mode: StrokeMode::new(Color::BLUE, 1.),
                     },
                     transform,
                 ));
@@ -109,8 +107,8 @@ fn setup(mut commands: Commands) {
             Geometry::LineString(_) => {
                 let mut coords: Vec<Point> = Vec::new();
 
-                for coord in scaled_geom.coords_iter() {
-                    println!("LineString x={:?} y={:?}", coord.x, coord.y);
+                for coord in geom.coords_iter() {
+                    //println!("LineString x={:?} y={:?}", coord.x, coord.y);
                     coords.push(Point::new(coord.x as f64, coord.y as f64));
                 }
 
@@ -129,7 +127,7 @@ fn setup(mut commands: Commands) {
                 );
 
                 let builder = GeometryBuilder::new().add(&shape);
-                layers.add(scaled_geom.clone(), "line_string".to_owned());
+                layers.add(geom.clone(), "line_string".to_owned());
                 let translation = Vec3 {
                     x: 0.,
                     y: 0.,
@@ -138,33 +136,24 @@ fn setup(mut commands: Commands) {
                 let transform = Transform::from_translation(translation);
 
                 commands.spawn(builder.build(
-                    DrawMode::Outlined {
-                        fill_mode: FillMode::color(Color::ORANGE_RED),
-                        outline_mode: StrokeMode::new(Color::ORANGE_RED, 0.1),
-                    },
+                    DrawMode::Stroke(StrokeMode::color(Color::YELLOW_GREEN)),
                     transform,
                 ));
             }
             Geometry::Point(_) => {
-                let centroid = scaled_geom.centroid().unwrap();
-
-                println!("Point x={:?} y={:?}", centroid.0.x, centroid.0.y);
-
-                let shape = shapes::Circle {
-                    radius: 1.,
-                    center: Vec2::new(centroid.0.x as f32, centroid.0.y as f32),
-                };
-                let builder = GeometryBuilder::new().add(&shape);
-                layers.add(scaled_geom.clone(), "point(s)".to_owned());
+                let center = geom.centroid().unwrap();
+                layers.add(geom.clone(),"point(s)".to_owned());
                 let z = calculate_z(layers.last_layer_id(), MeshType::Point);
+                println!("Point x={:?} y={:?}", center.0.x, center.0.y);
 
-                commands.spawn(builder.build(
-                    DrawMode::Outlined {
-                        fill_mode: FillMode::color(Color::ORANGE_RED),
-                        outline_mode: StrokeMode::color(Color::ORANGE_RED),
-                    },
-                    Transform::from_xyz(0., 0., z),
-                ));
+                commands.spawn(bevy::sprite::MaterialMesh2dBundle {
+                    mesh: meshes
+                        .add(shape::Circle::new(1.).into())
+                        .into(),
+                    material: materials.add(Color::PINK.into()),
+                    transform: Transform::from_translation(Vec3::new(center.0.x as f32, center.0.y as f32, z)),
+                    ..Default::default()
+                });
             }
             _ => todo!(),
         }
@@ -238,12 +227,11 @@ fn setup_camera(layers: AllLayers) -> Camera2dBundle {
         near: 0.,
         far: 1000.,
         scaling_mode: bevy::render::camera::ScalingMode::WindowSize,
-        scale: 0.1,
+        scale: 0.5,
         ..Default::default()
     };
 
-    camera.transform =
-        Transform::from_xyz(center.0.x as f32, center.0.y as f32, 999.9);
+    camera.transform = Transform::from_xyz(center.0.x as f32, center.0.y as f32, 999.9);
 
     camera
 }
