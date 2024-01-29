@@ -10,7 +10,7 @@ use bevy::prelude::*;
 
 use bevy_inspector_egui::bevy_egui::EguiPlugin;
 use bevy_inspector_egui::bevy_inspector;
-use bevy_prototype_lyon::prelude::*;
+use bevy_prototype_lyon::prelude::{tess::geom::euclid::default, *};
 
 use geo::{Centroid, CoordsIter};
 use geo_types::{Geometry, Point};
@@ -64,9 +64,10 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
-    let geojson = read_geojson("C:/Users/masco/gis_test-1/maps/test.geojson".to_owned());
+    let geojson = read_geojson("C:/Users/masco/gis_test-1/maps/italia.geojson".to_owned());
     let feature_collection = read_geojson_feature_collection(geojson);
     let mut layers = gis_layers::AllLayers::new();
+    let mut string_array: Vec<String> = Vec::default();
 
     for feature in feature_collection {
         let geometry = feature.geometry.unwrap();
@@ -77,7 +78,6 @@ fn setup(
                 let mut coords: Vec<Vec2> = Vec::new();
 
                 for coord in geom.coords_iter() {
-                    println!("Polygon x={:?} y={:?}", coord.x, coord.y);
                     coords.push(Vec2 {
                         x: coord.x as f32,
                         y: coord.y as f32,
@@ -98,8 +98,8 @@ fn setup(
 
                 commands.spawn(builder.build(
                     DrawMode::Outlined {
-                        fill_mode: FillMode::color(Color::BLUE),
-                        outline_mode: StrokeMode::new(Color::BLUE, 1.),
+                        fill_mode: FillMode::color(Color::WHITE),
+                        outline_mode: StrokeMode::new(Color::BLUE, 0.5),
                     },
                     transform,
                 ));
@@ -144,7 +144,6 @@ fn setup(
                 let center = geom.centroid().unwrap();
                 layers.add(geom.clone(),"point(s)".to_owned());
                 let z = calculate_z(layers.last_layer_id(), MeshType::Point);
-                println!("Point x={:?} y={:?}", center.0.x, center.0.y);
 
                 commands.spawn(bevy::sprite::MaterialMesh2dBundle {
                     mesh: meshes
@@ -155,7 +154,15 @@ fn setup(
                     ..Default::default()
                 });
             }
-            _ => todo!(),
+            Geometry::MultiPolygon(_) => { 
+                //to implement
+            },
+            Geometry::MultiLineString(_) => { println!("multiline")},
+            Geometry::MultiPoint(_) => {println!("multipoint")},
+            Geometry::Rect(_) => {println!("rect")},
+            Geometry::Triangle(_) => {println!("triangle")},
+            Geometry::Line(_) => {println!("line")},
+            Geometry::GeometryCollection(_) => {println!("geomColl")},
         }
     }
 
