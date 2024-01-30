@@ -11,6 +11,7 @@ bevy = "0.9.1"
 bevy-inspector-egui = "0.17.0"
 bevy_asset = "0.10.1"
 bevy_prototype_lyon="0.7.0"
+bevy_pancam = {version = "0.7.0", features = ["bevy_egui"]}
 geo-types = "0.7.8"
 geo = "0.27"
 geojson = { version = "*", features = ["geo-types"] }
