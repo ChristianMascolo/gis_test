@@ -15,3 +15,5 @@ bevy_pancam = {version = "0.7.0", features = ["bevy_egui"]}
 geo-types = "0.7.8"
 geo = "0.27"
 geojson = { version = "*", features = ["geo-types"] }
+eframe = "0.19"
+egui_file = "0.4.1"

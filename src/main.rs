@@ -12,13 +12,58 @@ use bevy_inspector_egui::bevy_egui::EguiPlugin;
 use bevy_inspector_egui::bevy_inspector;
 use bevy_pancam::PanCam;
 use bevy_prototype_lyon::prelude::*;
-
+use eframe::{
+    egui::{CentralPanel, Context},
+    App as OtherApp, Frame,
+};
+use egui_file::FileDialog;
 use geo::Centroid;
 use geo_types::{Geometry, Point};
 use gis_test::*;
+use std::{
+    ffi::OsStr,
+    path::{Path, PathBuf},
+};
+
+#[derive(Default)]
+pub struct Demo {
+    opened_file: Option<PathBuf>,
+    open_file_dialog: Option<FileDialog>,
+}
+
+impl OtherApp for Demo {
+    fn update(&mut self, ctx: &Context, _frame: &mut Frame) {
+        CentralPanel::default().show(ctx, |ui| {
+            if (ui.button("Open")).clicked() {
+                // Show only files with the extension "txt".
+                let filter = Box::new({
+                    let ext = Some(OsStr::new("txt"));
+                    move |path: &Path| -> bool { path.extension() == ext }
+                });
+                let mut dialog =
+                    FileDialog::open_file(self.opened_file.clone()).show_new_folder(true);
+                dialog.open();
+                self.open_file_dialog = Some(dialog);
+            }
+
+            if let Some(dialog) = &mut self.open_file_dialog {
+                if dialog.show(ctx).selected() {
+                    if let Some(file) = dialog.path() {
+                        self.opened_file = Some(file.to_path_buf());
+                    }
+                }
+            }
+        });
+    }
+}
 
 fn main() {
     let mut app = App::new();
+    //let _ = eframe::run_native(
+    //    "File Dialog Demo",
+    //    eframe::NativeOptions::default(),
+    //    Box::new(|_cc| Box::new(Demo::default())),
+    //);
 
     // resources
     app.insert_resource(ClearColor(Color::rgb(255., 255., 255.)));
@@ -59,7 +104,7 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
-    let geojson = read_geojson("C:/Users/masco/gis_test-1/maps/20mUSA.json".to_owned());
+    let geojson = read_geojson("C:/Users/masco/gis_test-1/maps/campania.geojson".to_owned());
     let feature_collection = read_geojson_feature_collection(geojson);
     let mut layers: gis_layers::AllLayers = gis_layers::AllLayers::new();
 
@@ -69,9 +114,12 @@ fn setup(
 
         match geom {
             Geometry::Polygon(polygon) => {
-                layers.add(geo::Geometry::Polygon(polygon.clone()), "Polygon".to_owned());
+                layers.add(
+                    geo::Geometry::Polygon(polygon.clone()),
+                    "Polygon".to_owned(),
+                );
 
-                let (builder,transform) = build_polygon(polygon,layers.last_layer_id());
+                let (builder, transform) = build_polygon(polygon, layers.last_layer_id());
 
                 commands.spawn(builder.build(
                     DrawMode::Outlined {
@@ -82,9 +130,12 @@ fn setup(
                 ));
             }
             Geometry::LineString(linestring) => {
-                layers.add(geo::Geometry::LineString(linestring.clone()), "line_string".to_owned());
+                layers.add(
+                    geo::Geometry::LineString(linestring.clone()),
+                    "line_string".to_owned(),
+                );
 
-                let (builder,transform) = build_linestring(linestring, layers.last_layer_id());
+                let (builder, transform) = build_linestring(linestring, layers.last_layer_id());
 
                 commands.spawn(builder.build(
                     DrawMode::Stroke(StrokeMode::color(Color::YELLOW_GREEN)),
@@ -93,24 +144,30 @@ fn setup(
             }
             Geometry::Point(point) => {
                 let center = point.centroid();
-                layers.add(geom.clone(),"point(s)".to_owned());
+                layers.add(geom.clone(), "point(s)".to_owned());
                 let z = calculate_z(layers.last_layer_id(), MeshType::Point);
 
                 commands.spawn(bevy::sprite::MaterialMesh2dBundle {
-                    mesh: meshes
-                        .add(shape::Circle::new(1.).into())
-                        .into(),
+                    mesh: meshes.add(shape::Circle::new(1.).into()).into(),
                     material: materials.add(Color::PINK.into()),
-                    transform: Transform::from_translation(Vec3::new(center.0.x as f32, center.0.y as f32, z)),
+                    transform: Transform::from_translation(Vec3::new(
+                        center.0.x as f32,
+                        center.0.y as f32,
+                        z,
+                    )),
                     ..Default::default()
                 });
             }
-            Geometry::MultiPolygon(multi_polygon) => { 
-                layers.add(geo::Geometry::MultiPolygon(multi_polygon.clone()), "MultiPolygon".to_owned());
+            Geometry::MultiPolygon(multi_polygon) => {
+                layers.add(
+                    geo::Geometry::MultiPolygon(multi_polygon.clone()),
+                    "MultiPolygon".to_owned(),
+                );
 
-                for polygon in multi_polygon.0.iter(){
-                    let (builder,transform) = build_polygon(polygon.clone(), layers.last_layer_id());
-                
+                for polygon in multi_polygon.0.iter() {
+                    let (builder, transform) =
+                        build_polygon(polygon.clone(), layers.last_layer_id());
+
                     commands.spawn(builder.build(
                         DrawMode::Outlined {
                             fill_mode: FillMode::color(Color::WHITE),
@@ -119,38 +176,46 @@ fn setup(
                         transform,
                     ));
                 }
-            },
-            Geometry::MultiLineString(multi_line_string) => { 
-                layers.add(geo::Geometry::MultiLineString(multi_line_string.clone()), "MultiLineString".to_owned());
+            }
+            Geometry::MultiLineString(multi_line_string) => {
+                layers.add(
+                    geo::Geometry::MultiLineString(multi_line_string.clone()),
+                    "MultiLineString".to_owned(),
+                );
 
-                for line in multi_line_string.iter(){
-                    let (builder,transform) = build_linestring(line.clone(), layers.last_layer_id());
+                for line in multi_line_string.iter() {
+                    let (builder, transform) =
+                        build_linestring(line.clone(), layers.last_layer_id());
 
                     commands.spawn(builder.build(
                         DrawMode::Stroke(StrokeMode::color(Color::YELLOW_GREEN)),
                         transform,
                     ));
                 }
-            },
+            }
             Geometry::MultiPoint(multi_point) => {
-                for point in multi_point{
+                for point in multi_point {
                     layers.add(geo::Geometry::Point(point), "Point".to_owned());
                     let z = calculate_z(layers.last_layer_id(), MeshType::Point);
                     commands.spawn(bevy::sprite::MaterialMesh2dBundle {
-                        mesh: meshes
-                            .add(shape::Circle::new(1.).into())
-                            .into(),
+                        mesh: meshes.add(shape::Circle::new(1.).into()).into(),
                         material: materials.add(Color::PINK.into()),
-                        transform: Transform::from_translation(Vec3::new(point.0.x as f32, point.0.y as f32, z)),
+                        transform: Transform::from_translation(Vec3::new(
+                            point.0.x as f32,
+                            point.0.y as f32,
+                            z,
+                        )),
                         ..Default::default()
                     });
                 }
-            },
+            }
             _ => continue,
         }
     }
 
-    commands.spawn(setup_camera(layers)).insert(PanCam::default());
+    commands
+        .spawn(setup_camera(layers))
+        .insert(PanCam::default());
 }
 
 fn inspector_ui(world: &mut bevy::ecs::world::World) {
@@ -194,7 +259,11 @@ fn setup_camera(layers: gis_layers::AllLayers) -> Camera2dBundle {
         ..Default::default()
     };
 
-    camera.transform = bevy::transform::components::Transform::from_xyz(center.0.x as f32, center.0.y as f32, 999.9);
+    camera.transform = bevy::transform::components::Transform::from_xyz(
+        center.0.x as f32,
+        center.0.y as f32,
+        999.9,
+    );
 
     camera
 }
