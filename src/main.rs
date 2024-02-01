@@ -60,7 +60,9 @@ fn startup(mut commands: Commands) {
 
 fn ui(
     mut egui_context: ResMut<EguiContext>,
-    commands: Commands,
+    mut commands: Commands,
+    mut app_exit_events: ResMut<Events<bevy::app::AppExit>>,
+    entities_query: Query<Entity,Without<Camera>>,
     meshes: ResMut<Assets<Mesh>>,
     materials: ResMut<Assets<ColorMaterial>>,
 ) {
@@ -68,15 +70,26 @@ fn ui(
         ui.vertical_centered(|ui| {
             ui.heading("GIS");
             ui.separator();
-            let file_btn = egui::Button::new(RichText::new("▶ Select File").color(Color32::GREEN));
+            let select_btn = egui::Button::new(RichText::new("▶ Select File").color(Color32::GREEN));
+            let clear_btn = egui::Button::new(RichText::new("▶ Clear").color(Color32::YELLOW));
+            let exit_btn = egui::Button::new(RichText::new("▶ Exit").color(Color32::RED));
 
-            if ui.add(file_btn).clicked() {
+            if ui.add(select_btn).clicked() {
                 if let Some(path) = rfd::FileDialog::new().pick_file() {
                     let file_path = Some(path.display().to_string()).unwrap();
-                    build_meshes(meshes, materials, commands, file_path);
+                    build_meshes(meshes, materials, &mut commands, file_path);
                 }
             }
 
+            if ui.add(clear_btn).clicked(){
+                for entity in entities_query.iter(){
+                    commands.entity(entity).despawn();
+                }
+            }
+
+            if ui.add(exit_btn).clicked(){
+                app_exit_events.send(bevy::app::AppExit);
+            }
         })
     });
 }
@@ -84,7 +97,7 @@ fn ui(
 fn build_meshes(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
-    mut commands: Commands,
+    commands: &mut Commands,
     file_path: String,
 ) {
     let geojson = read_geojson(file_path);
