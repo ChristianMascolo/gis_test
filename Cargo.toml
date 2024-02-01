@@ -8,12 +8,13 @@ edition = "2021"
 [dependencies]
 geo-bevy = "0.3.0"
 bevy = "0.9.1"
-bevy-inspector-egui = "0.17.0"
 bevy_asset = "0.10.1"
 bevy_prototype_lyon="0.7.0"
 bevy_pancam = {version = "0.7.0", features = ["bevy_egui"]}
+bevy_egui = "0.17"
 geo-types = "0.7.8"
 geo = "0.27"
 geojson = { version = "*", features = ["geo-types"] }
 eframe = "0.19"
 egui_file = "0.4.1"
+rfd = "0.13.0"
