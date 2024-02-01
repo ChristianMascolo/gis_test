@@ -12,9 +12,9 @@ use bevy_egui::{
 };
 
 use bevy_pancam::PanCam;
-use bevy_prototype_lyon::prelude::*;
+use bevy_prototype_lyon::{entity, prelude::*};
 use geo::Centroid;
-use geo_types::{Geometry, Point};
+use geo_types::Geometry;
 use gis_test::*;
 
 fn main() {
@@ -46,32 +46,37 @@ fn main() {
     app.add_plugin(EguiPlugin);
 
     // systems
-    app.add_startup_system(setup);
-
+    app.add_startup_system(startup);
+    app.add_system(ui);
     // run
     app.run();
 }
 
-fn setup(
+fn startup(mut commands: Commands) {
+    commands
+        .spawn(Camera2dBundle::default())
+        .insert(PanCam::default());
+}
+
+fn ui(
     mut egui_context: ResMut<EguiContext>,
     commands: Commands,
     meshes: ResMut<Assets<Mesh>>,
     materials: ResMut<Assets<ColorMaterial>>,
 ) {
-    
     egui::SidePanel::left("main").show(egui_context.ctx_mut(), |ui| {
         ui.vertical_centered(|ui| {
             ui.heading("GIS");
             ui.separator();
-            let file_button =
-                egui::Button::new(RichText::new("▶ Select File").color(Color32::GREEN));
+            let file_btn = egui::Button::new(RichText::new("▶ Select File").color(Color32::GREEN));
 
-            if ui.add(file_button).clicked() {
-                if let Some(path) = rfd::FileDialog::new().pick_file(){
+            if ui.add(file_btn).clicked() {
+                if let Some(path) = rfd::FileDialog::new().pick_file() {
                     let file_path = Some(path.display().to_string()).unwrap();
                     build_meshes(meshes, materials, commands, file_path);
                 }
             }
+
         })
     });
 }
@@ -80,8 +85,8 @@ fn build_meshes(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut commands: Commands,
-    file_path: String
-){
+    file_path: String,
+) {
     let geojson = read_geojson(file_path);
     let feature_collection = read_geojson_feature_collection(geojson);
     let mut layers: gis_layers::AllLayers = gis_layers::AllLayers::new();
@@ -190,36 +195,4 @@ fn build_meshes(
             _ => continue,
         }
     }
-
-    commands
-        .spawn(setup_camera(layers))
-        .insert(PanCam::default());    
-}
-
-fn setup_camera(layers: gis_layers::AllLayers) -> Camera2dBundle {
-    let mut camera = Camera2dBundle::default();
-    let mut centroids: Vec<Point> = Vec::new();
-
-    for layer in layers.iter() {
-        let geom = &layer.geom_type;
-        centroids.push(geom.centroid().unwrap());
-    }
-
-    let center = medium_centroid(centroids);
-
-    camera.projection = bevy::render::camera::OrthographicProjection {
-        near: 0.,
-        far: 1000.,
-        scaling_mode: bevy::render::camera::ScalingMode::WindowSize,
-        scale: 0.5,
-        ..Default::default()
-    };
-
-    camera.transform = bevy::transform::components::Transform::from_xyz(
-        center.0.x as f32,
-        center.0.y as f32,
-        999.9,
-    );
-
-    camera
 }
