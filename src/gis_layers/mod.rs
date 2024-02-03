@@ -3,7 +3,7 @@ use crate::gis_layer_id::*;
 #[derive(Clone)]
 pub struct Layer{
     pub id: LayerId,
-    pub name: String,
+    pub file_name: String,
     pub geom_type: geo_types::Geometry,
     pub visible: bool,
 }
@@ -29,12 +29,12 @@ impl AllLayers{
     pub fn add(
         &mut self,
         geometry: geo_types::Geometry,
-        name: String,
+        file_name: String,
     ){
         let id = self.next_layer_id();
         let layer = Layer{
             id,
-            name,
+            file_name,
             visible: false,
             geom_type: geometry,
         };

@@ -14,8 +14,15 @@ use bevy_egui::{
 use bevy_pancam::PanCam;
 use bevy_prototype_lyon::{entity, prelude::*};
 use geo::Centroid;
-use geo_types::Geometry;
+use geo_types::{Geometry, Point};
+use gis_layers::AllLayers;
 use gis_test::*;
+
+#[derive(Component, Clone)]
+struct Files {
+    file_name: String,
+    file_layers: AllLayers,
+}
 
 fn main() {
     let mut app = App::new();
@@ -62,32 +69,58 @@ fn ui(
     mut egui_context: ResMut<EguiContext>,
     mut commands: Commands,
     mut app_exit_events: ResMut<Events<bevy::app::AppExit>>,
-    entities_query: Query<Entity,Without<Camera>>,
+    entities_query: Query<Entity, Without<Camera>>,
+    camera_query: Query<Entity, With<Camera>>,
+    files_query: Query<&Files>,
     meshes: ResMut<Assets<Mesh>>,
     materials: ResMut<Assets<ColorMaterial>>,
 ) {
+    let camera = camera_query.get_single().unwrap();
     egui::SidePanel::left("main").show(egui_context.ctx_mut(), |ui| {
         ui.vertical_centered(|ui| {
             ui.heading("GIS");
             ui.separator();
-            let select_btn = egui::Button::new(RichText::new("▶ Select File").color(Color32::GREEN));
+            let select_btn =
+                egui::Button::new(RichText::new("▶ Select File").color(Color32::GREEN));
             let clear_btn = egui::Button::new(RichText::new("▶ Clear").color(Color32::YELLOW));
             let exit_btn = egui::Button::new(RichText::new("▶ Exit").color(Color32::RED));
 
             if ui.add(select_btn).clicked() {
                 if let Some(path) = rfd::FileDialog::new().pick_file() {
                     let file_path = Some(path.display().to_string()).unwrap();
-                    build_meshes(meshes, materials, &mut commands, file_path);
+                    let file_name = path.file_name().unwrap().to_str().unwrap();
+                    let layers = build_meshes(
+                        meshes,
+                        materials,
+                        &mut commands,
+                        file_path,
+                        file_name.to_owned(),
+                    );
+                    let files = Files {
+                        file_name: file_name.to_owned(),
+                        file_layers: layers,
+                    };
+                    let mut vec_files: Vec<Files> = Vec::new();
+
+                    vec_files.push(files.clone());
+
+                    commands.spawn(files);
+
+                    for file in files_query.iter() {
+                        vec_files.push(file.clone());
+                    }
+
+                    center_camera(&mut commands, camera, vec_files);
                 }
             }
 
-            if ui.add(clear_btn).clicked(){
-                for entity in entities_query.iter(){
+            if ui.add(clear_btn).clicked() {
+                for entity in entities_query.iter() {
                     commands.entity(entity).despawn();
                 }
             }
 
-            if ui.add(exit_btn).clicked(){
+            if ui.add(exit_btn).clicked() {
                 app_exit_events.send(bevy::app::AppExit);
             }
         })
@@ -99,7 +132,8 @@ fn build_meshes(
     mut materials: ResMut<Assets<ColorMaterial>>,
     commands: &mut Commands,
     file_path: String,
-) {
+    file_name: String,
+) -> AllLayers {
     let geojson = read_geojson(file_path);
     let feature_collection = read_geojson_feature_collection(geojson);
     let mut layers: gis_layers::AllLayers = gis_layers::AllLayers::new();
@@ -110,10 +144,7 @@ fn build_meshes(
 
         match geom {
             Geometry::Polygon(polygon) => {
-                layers.add(
-                    geo::Geometry::Polygon(polygon.clone()),
-                    "Polygon".to_owned(),
-                );
+                layers.add(geo::Geometry::Polygon(polygon.clone()), file_name.clone());
 
                 let (builder, transform) = build_polygon(polygon, layers.last_layer_id());
 
@@ -128,7 +159,7 @@ fn build_meshes(
             Geometry::LineString(linestring) => {
                 layers.add(
                     geo::Geometry::LineString(linestring.clone()),
-                    "line_string".to_owned(),
+                    file_name.clone(),
                 );
 
                 let (builder, transform) = build_linestring(linestring, layers.last_layer_id());
@@ -140,7 +171,7 @@ fn build_meshes(
             }
             Geometry::Point(point) => {
                 let center = point.centroid();
-                layers.add(geom.clone(), "point(s)".to_owned());
+                layers.add(geom.clone(), file_name.clone());
                 let z = calculate_z(layers.last_layer_id(), MeshType::Point);
 
                 commands.spawn(bevy::sprite::MaterialMesh2dBundle {
@@ -157,7 +188,7 @@ fn build_meshes(
             Geometry::MultiPolygon(multi_polygon) => {
                 layers.add(
                     geo::Geometry::MultiPolygon(multi_polygon.clone()),
-                    "MultiPolygon".to_owned(),
+                    file_name.clone(),
                 );
 
                 for polygon in multi_polygon.0.iter() {
@@ -176,7 +207,7 @@ fn build_meshes(
             Geometry::MultiLineString(multi_line_string) => {
                 layers.add(
                     geo::Geometry::MultiLineString(multi_line_string.clone()),
-                    "MultiLineString".to_owned(),
+                    file_name.clone(),
                 );
 
                 for line in multi_line_string.iter() {
@@ -191,7 +222,7 @@ fn build_meshes(
             }
             Geometry::MultiPoint(multi_point) => {
                 for point in multi_point {
-                    layers.add(geo::Geometry::Point(point), "Point".to_owned());
+                    layers.add(geo::Geometry::Point(point), file_name.clone());
                     let z = calculate_z(layers.last_layer_id(), MeshType::Point);
                     commands.spawn(bevy::sprite::MaterialMesh2dBundle {
                         mesh: meshes.add(shape::Circle::new(1.).into()).into(),
@@ -208,4 +239,29 @@ fn build_meshes(
             _ => continue,
         }
     }
+
+    layers
+}
+
+fn center_camera(commands: &mut Commands, camera: Entity, files: Vec<Files>) {
+    let mut points: Vec<geo_types::Point<f64>> = Vec::new();
+    let mut new_camera = Camera2dBundle::default();
+
+    commands.entity(camera).despawn();
+
+    for file in files {
+        let layers = file.file_layers;
+        for layer in layers.iter() {
+            let geom = &layer.geom_type;
+            let centroid = geom.centroid().unwrap();
+
+            points.push(centroid);
+        }
+    }
+
+    let center = medium_centroid(points);
+
+    new_camera.transform = Transform::from_xyz(center.0.x as f32, center.0.y as f32, 999.9);
+
+    commands.spawn(new_camera).insert(PanCam::default());
 }
