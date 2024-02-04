@@ -1,6 +1,8 @@
 mod gis_layer_id;
 mod gis_layers;
 
+use std::ops::Deref;
+
 use ::bevy::{
     prelude::*,
     window::{WindowDescriptor, WindowPlugin},
@@ -19,11 +21,11 @@ use gis_layers::AllLayers;
 use gis_test::*;
 
 #[derive(Component, Clone)]
-struct Files {
-    file_name: String,
-    file_path: String,
-    file_layers: AllLayers,
-    file_entities: Vec<Entity>,
+struct EntityFile {
+    name: String,
+    path: String,
+    layers: AllLayers,
+    entities: Vec<Entity>,
 }
 
 fn main() {
@@ -71,10 +73,11 @@ fn ui(
     mut egui_context: ResMut<EguiContext>,
     mut commands: Commands,
     mut app_exit_events: ResMut<Events<bevy::app::AppExit>>,
-    mut files_query: Query<&Files>,
+    mut files_query: Query<&EntityFile>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
-    entities_query: Query<Entity, Without<Camera>>,
+    file_entity_query: Query<Entity,With<EntityFile>>,
+    all_entities_query: Query<Entity, Without<Camera>>,
     camera_query: Query<Entity, With<Camera>>,
 ) {
     let camera = camera_query.get_single().unwrap();
@@ -90,39 +93,41 @@ fn ui(
                 let exit_btn = egui::Button::new(RichText::new("▶ Exit").color(Color32::RED));
 
                 if ui.add(select_btn).clicked() {
-                    if let Some(path) = rfd::FileDialog::new().pick_file() {
-                        let file_path = Some(path.display().to_string()).unwrap();
-                        let file_name = path.file_name().unwrap().to_str().unwrap();
+                    if let Some(path_buf) = rfd::FileDialog::new().pick_file() {
+                        let extension = path_buf.extension().unwrap();
+                        if extension.eq("json") || extension.eq("geojson") {
+                            let path = Some(path_buf.display().to_string()).unwrap();
+                            let name = path_buf.file_name().unwrap().to_str().unwrap();
+                            let (layers, entities) = build_meshes(
+                                &mut *meshes,
+                                &mut *materials,
+                                &mut commands,
+                                path.to_owned(),
+                                name.to_owned(),
+                            );
+                            let entity_file = EntityFile {
+                                name: name.to_owned(),
+                                path: path.to_owned(),
+                                layers: layers,
+                                entities: entities,
+                            };
+                            let mut vec_entity_file: Vec<EntityFile> = Vec::new();
 
-                        let (layers, entities) = build_meshes(
-                            &mut *meshes,
-                            &mut *materials,
-                            &mut commands,
-                            file_path.to_owned(),
-                            file_name.to_owned(),
-                        );
-                        let files = Files {
-                            file_name: file_name.to_owned(),
-                            file_path: file_path.to_owned(),
-                            file_layers: layers,
-                            file_entities: entities,
-                        };
-                        let mut vec_files: Vec<Files> = Vec::new();
+                            vec_entity_file.push(entity_file.clone());
 
-                        vec_files.push(files.clone());
+                            commands.spawn(entity_file);
 
-                        commands.spawn(files);
+                            for file in files_query.iter() {
+                                vec_entity_file.push(file.clone());
+                            }
 
-                        for file in files_query.iter() {
-                            vec_files.push(file.clone());
+                            center_camera(&mut commands, camera, vec_entity_file);
                         }
-
-                        center_camera(&mut commands, camera, vec_files);
                     }
                 }
 
                 if ui.add(clear_btn).clicked() {
-                    for entity in entities_query.iter() {
+                    for entity in all_entities_query.iter() {
                         commands.entity(entity).despawn();
                     }
                 }
@@ -133,28 +138,26 @@ fn ui(
 
                 ui.separator();
 
-                for file in files_query.iter_mut() {
-                    let file_name = &file.file_name;
-                    let add_file_btn =
-                        egui::Button::new(RichText::new("Add").color(Color32::WHITE));
+                for file in &mut files_query.iter_mut() {
+                    let name = &file.name;
                     let remove_file_btn =
                         egui::Button::new(RichText::new("Remove").color(Color32::WHITE));
-                    let label_text = file_name.to_owned() + " actions";
+                    let label_text = name.to_owned();
 
-                    ui.label(RichText::new(label_text).strong());
-
-                    if ui.add(add_file_btn).clicked() {
-                        let (_, _) = build_meshes(
-                            &mut *meshes,
-                            &mut *materials,
-                            &mut commands,
-                            file.file_path.to_owned(),
-                            file_name.to_owned(),
-                        );
-                    }
+                    ui.label(
+                        RichText::new(label_text)
+                            .strong()
+                            .color(Color32::DEBUG_COLOR),
+                    );
 
                     if ui.add(remove_file_btn).clicked() {
-                        despawn_entities_file(&mut commands, file.clone());
+                        for entity_file in file_entity_query.iter(){
+                            commands.entity(entity_file).despawn();
+                        }
+
+                        for entity in file.entities.iter() {
+                            commands.entity(*entity).despawn();
+                        }
                     }
 
                     ui.separator();
@@ -167,10 +170,10 @@ fn build_meshes(
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<ColorMaterial>,
     commands: &mut Commands,
-    file_path: String,
-    file_name: String,
+    path: String,
+    name: String,
 ) -> (AllLayers, Vec<Entity>) {
-    let geojson = read_geojson(file_path);
+    let geojson = read_geojson(path);
     let feature_collection = read_geojson_feature_collection(geojson);
     let mut layers: gis_layers::AllLayers = gis_layers::AllLayers::new();
     let mut entities_id: Vec<Entity> = Vec::new();
@@ -181,7 +184,7 @@ fn build_meshes(
 
         match geom {
             Geometry::Polygon(polygon) => {
-                layers.add(geo::Geometry::Polygon(polygon.clone()), file_name.clone());
+                layers.add(geo::Geometry::Polygon(polygon.clone()), name.clone());
 
                 let (builder, transform) = build_polygon(polygon, layers.last_layer_id());
 
@@ -198,10 +201,7 @@ fn build_meshes(
                 entities_id.push(id);
             }
             Geometry::LineString(linestring) => {
-                layers.add(
-                    geo::Geometry::LineString(linestring.clone()),
-                    file_name.clone(),
-                );
+                layers.add(geo::Geometry::LineString(linestring.clone()), name.clone());
 
                 let (builder, transform) = build_linestring(linestring, layers.last_layer_id());
 
@@ -216,7 +216,7 @@ fn build_meshes(
             }
             Geometry::Point(point) => {
                 let center = point.centroid();
-                layers.add(geom.clone(), file_name.clone());
+                layers.add(geom.clone(), name.clone());
                 let z = calculate_z(layers.last_layer_id(), MeshType::Point);
 
                 let id = commands
@@ -237,7 +237,7 @@ fn build_meshes(
             Geometry::MultiPolygon(multi_polygon) => {
                 layers.add(
                     geo::Geometry::MultiPolygon(multi_polygon.clone()),
-                    file_name.clone(),
+                    name.clone(),
                 );
 
                 for polygon in multi_polygon.0.iter() {
@@ -260,7 +260,7 @@ fn build_meshes(
             Geometry::MultiLineString(multi_line_string) => {
                 layers.add(
                     geo::Geometry::MultiLineString(multi_line_string.clone()),
-                    file_name.clone(),
+                    name.clone(),
                 );
 
                 for line in multi_line_string.iter() {
@@ -279,7 +279,7 @@ fn build_meshes(
             }
             Geometry::MultiPoint(multi_point) => {
                 for point in multi_point {
-                    layers.add(geo::Geometry::Point(point), file_name.clone());
+                    layers.add(geo::Geometry::Point(point), name.clone());
                     let z = calculate_z(layers.last_layer_id(), MeshType::Point);
                     let id = commands
                         .spawn(bevy::sprite::MaterialMesh2dBundle {
@@ -304,14 +304,14 @@ fn build_meshes(
     (layers, entities_id)
 }
 
-fn center_camera(commands: &mut Commands, camera: Entity, files: Vec<Files>) {
+fn center_camera(commands: &mut Commands, camera: Entity, entity_file: Vec<EntityFile>) {
     let mut points: Vec<geo_types::Point<f64>> = Vec::new();
     let mut new_camera = Camera2dBundle::default();
 
     commands.entity(camera).despawn();
 
-    for file in files {
-        let layers = file.file_layers;
+    for file in entity_file {
+        let layers = file.layers;
         for layer in layers.iter() {
             let geom = &layer.geom_type;
             let centroid = geom.centroid().unwrap();
@@ -325,10 +325,4 @@ fn center_camera(commands: &mut Commands, camera: Entity, files: Vec<Files>) {
     new_camera.transform = Transform::from_xyz(center.0.x as f32, center.0.y as f32, 999.9);
 
     commands.spawn(new_camera).insert(PanCam::default());
-}
-
-fn despawn_entities_file(commands: &mut Commands, file: Files) {
-    for entity in file.file_entities.iter() {
-        commands.entity(*entity).despawn();
-    }
 }
