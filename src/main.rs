@@ -5,20 +5,24 @@ use std::ops::Deref;
 
 use ::bevy::{
     prelude::*,
-    window::{WindowDescriptor, WindowPlugin},
+    window::Window,
 };
 
 use bevy_egui::{
     egui::{self, Color32, RichText},
-    EguiContext, EguiPlugin,
+    EguiContexts, EguiPlugin,
 };
-
+use bevy::render::camera::ScalingMode;
+// use bevy_math::primitives::dim2::Circle;
+use bevy::math::primitives::Circle;
 use bevy_pancam::PanCam;
 use bevy_prototype_lyon::prelude::*;
+use bevy_prototype_lyon::draw::{Fill, Stroke};
 use geo::Centroid;
 use geo_types::Geometry;
 use gis_layers::AllLayers;
 use gis_test::*;
+use rfd::*;
 
 #[derive(Component, Clone)]
 struct EntityFile {
@@ -35,42 +39,42 @@ fn main() {
     app.insert_resource(ClearColor(Color::BLACK));
 
     // plugins
-    app.add_plugins(bevy::MinimalPlugins);
-    app.add_plugin(WindowPlugin {
-        window: WindowDescriptor {
-            title: "gis_test".to_string(),
-            ..Default::default()
-        },
-        ..Default::default()
-    });
-    app.add_plugin(bevy::asset::AssetPlugin::default());
-    app.add_plugin(bevy::winit::WinitPlugin::default());
-    app.add_plugin(bevy::render::RenderPlugin::default());
-    app.add_plugin(bevy::render::texture::ImagePlugin::default());
-    app.add_plugin(bevy::log::LogPlugin::default());
-    app.add_plugin(bevy::input::InputPlugin::default());
-    app.add_plugin(bevy::core_pipeline::CorePipelinePlugin::default());
-    app.add_plugin(bevy::transform::TransformPlugin::default());
-    app.add_plugin(bevy::sprite::SpritePlugin::default());
-    app.add_plugin(bevy_pancam::PanCamPlugin::default());
-    app.add_plugin(ShapePlugin);
-    app.add_plugin(EguiPlugin);
-
+    app.add_plugins(bevy::DefaultPlugins);
+    app.add_plugins(ShapePlugin);
+    app.add_plugins(EguiPlugin);
     // systems
-    app.add_startup_system(startup);
-    app.add_system(ui);
+    app.add_systems(Startup, startup);
+    app.add_systems(Update, ui);
     // run
     app.run();
 }
 
 fn startup(mut commands: Commands) {
-    commands
-        .spawn(Camera2dBundle::default())
-        .insert(PanCam::default());
+    let far = 1000.;
+    // Offset the whole simulation to the left to take the width of the UI panel into account.
+    let ui_offset = -700.;
+    // Scale the simulation so it fills the portion of the screen not covered by the UI panel.
+    let scale_x = 700. / (700. + ui_offset);
+    // The translation x must depend on the scale_x to keep the left offset constant between window resizes.
+    let mut initial_transform = Transform::from_xyz(ui_offset * scale_x, 0., far - 0.1);
+    initial_transform.scale.x = scale_x;
+    initial_transform.scale.y = 700. / 700.;
+
+    commands.spawn(Camera2dBundle {
+        projection: OrthographicProjection {
+            far,
+            scaling_mode: ScalingMode::WindowSize(1.),
+            viewport_origin: Vec2::new(0., 0.),
+            ..default()
+        }
+        .into(),
+        transform: initial_transform,
+        ..default()
+    });
 }
 
 fn ui(
-    mut egui_context: ResMut<EguiContext>,
+    mut egui_context: EguiContexts,
     mut commands: Commands,
     mut app_exit_events: ResMut<Events<bevy::app::AppExit>>,
     mut files_query: Query<&EntityFile>,
@@ -82,7 +86,7 @@ fn ui(
 ) {
     let camera = camera_query.get_single().unwrap();
     egui::SidePanel::left("main")
-        .resizable(true)
+        // .resizable(true)
         .show(egui_context.ctx_mut(), |ui| {
             ui.vertical_centered(|ui| {
                 ui.heading(RichText::new("GIS").color(Color32::RED).strong());
@@ -189,11 +193,9 @@ fn build_meshes(
                 let (builder, transform) = build_polygon(polygon, layers.last_layer_id());
 
                 let id = commands
-                    .spawn(builder.build(
-                        DrawMode::Outlined {
-                            fill_mode: FillMode::color(Color::WHITE),
-                            outline_mode: StrokeMode::new(Color::BLUE, 0.1),
-                        },
+                    .spawn((builder.build(),
+                        Fill::color(Color::WHITE),
+                        Stroke::new(Color::BLUE, 0.1),
                         transform,
                     ))
                     .id();
@@ -206,11 +208,19 @@ fn build_meshes(
                 let (builder, transform) = build_linestring(linestring, layers.last_layer_id());
 
                 let id = commands
-                    .spawn(builder.build(
-                        DrawMode::Stroke(StrokeMode::color(Color::YELLOW_GREEN)),
-                        transform,
+                    .spawn((builder.build(),
+                        Fill::color(Color::WHITE),
+                        Stroke::new(Color::YELLOW_GREEN, 0.1),
+                        // transform,
                     ))
                     .id();
+                
+                // let id = commands
+                //     .spawn(builder.build(
+                //         DrawMode::Stroke(StrokeMode::color(Color::YELLOW_GREEN)),
+                //         transform,
+                //     ))
+                //     .id();
 
                 entities_id.push(id);
             }
@@ -221,8 +231,9 @@ fn build_meshes(
 
                 let id = commands
                     .spawn(bevy::sprite::MaterialMesh2dBundle {
-                        mesh: meshes.add(shape::Circle::new(1.).into()).into(),
-                        material: materials.add(Color::PINK.into()),
+                        // mesh: meshes.add(Circle::new(1.).into()).into(),
+                        mesh: bevy::sprite::Mesh2dHandle(meshes.add(Circle::new(1.).mesh())),
+                        material: materials.add(Color::PINK),
                         transform: Transform::from_translation(Vec3::new(
                             center.0.x as f32,
                             center.0.y as f32,
@@ -245,14 +256,21 @@ fn build_meshes(
                         build_polygon(polygon.clone(), layers.last_layer_id());
 
                     let id = commands
-                        .spawn(builder.build(
-                            DrawMode::Outlined {
-                                fill_mode: FillMode::color(Color::WHITE),
-                                outline_mode: StrokeMode::new(Color::BLUE, 0.1),
-                            },
+                        .spawn((builder.build(),
+                            Fill::color(Color::WHITE),
+                            Stroke::new(Color::BLUE, 0.1),
                             transform,
                         ))
                         .id();
+                    // let id = commands
+                    //     .spawn(builder.build(
+                    //         DrawMode::Outlined {
+                    //             fill_mode: FillMode::color(Color::WHITE),
+                    //             outline_mode: StrokeMode::new(Color::BLUE, 0.1),
+                    //         },
+                    //         transform,
+                    //     ))
+                    //     .id();
 
                     entities_id.push(id);
                 }
@@ -268,11 +286,18 @@ fn build_meshes(
                         build_linestring(line.clone(), layers.last_layer_id());
 
                     let id = commands
-                        .spawn(builder.build(
-                            DrawMode::Stroke(StrokeMode::color(Color::YELLOW_GREEN)),
+                        .spawn((builder.build(),
+                            Fill::color(Color::WHITE),
+                            Stroke::new(Color::YELLOW_GREEN, 0.1),
                             transform,
                         ))
                         .id();
+                    // let id = commands
+                    //     .spawn(builder.build(
+                    //         DrawMode::Stroke(StrokeMode::color(Color::YELLOW_GREEN)),
+                    //         transform,
+                    //     ))
+                    //     .id();
 
                     entities_id.push(id);
                 }
@@ -283,8 +308,8 @@ fn build_meshes(
                     let z = calculate_z(layers.last_layer_id(), MeshType::Point);
                     let id = commands
                         .spawn(bevy::sprite::MaterialMesh2dBundle {
-                            mesh: meshes.add(shape::Circle::new(1.).into()).into(),
-                            material: materials.add(Color::PINK.into()),
+                            mesh: bevy::sprite::Mesh2dHandle(meshes.add(Circle::new(1.).mesh())),
+                            material: materials.add(Color::PINK),
                             transform: Transform::from_translation(Vec3::new(
                                 point.0.x as f32,
                                 point.0.y as f32,
@@ -324,5 +349,5 @@ fn center_camera(commands: &mut Commands, camera: Entity, entity_file: Vec<Entit
 
     new_camera.transform = Transform::from_xyz(center.0.x as f32, center.0.y as f32, 999.9);
 
-    commands.spawn(new_camera).insert(PanCam::default());
+    // commands.spawn(new_camera).insert(PanCam::default());
 }
