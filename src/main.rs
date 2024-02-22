@@ -15,7 +15,7 @@ use bevy_egui::{
 use bevy::render::camera::ScalingMode;
 // use bevy_math::primitives::dim2::Circle;
 use bevy::math::primitives::Circle;
-use bevy_pancam::PanCam;
+// use bevy_pancam::PanCam;
 use bevy_prototype_lyon::prelude::*;
 use bevy_prototype_lyon::draw::{Fill, Stroke};
 use geo::Centroid;

@@ -10,12 +10,12 @@ geo-bevy = "1.0"
 bevy = "0.13"
 bevy_asset = "0.13"
 bevy_prototype_lyon="0.11"
-bevy_pancam = {version = "0.10.0", features = ["bevy_egui"]}
+# bevy_pancam = {version = "0.10.0", features = ["bevy_egui"]}
 bevy_egui = "0.25"
 bevy_math = "0.13"
 geo-types = "0.7.8"
 geo = "0.27"
 geojson = { version = "*", features = ["geo-types"] }
 eframe = "0.26.*"
-egui_file = "0.16.1"
+egui_file = "0.16.2"
 rfd = "0.13.0"
