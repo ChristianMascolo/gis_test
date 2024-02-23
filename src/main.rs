@@ -3,21 +3,20 @@ mod gis_layers;
 
 use std::ops::Deref;
 
-use ::bevy::{
-    prelude::*,
-    window::Window,
-};
+use ::bevy::{prelude::*, window::Window};
 
+use bevy_pancam::*;
+
+use bevy::render::camera::ScalingMode;
 use bevy_egui::{
     egui::{self, Color32, RichText},
     EguiContexts, EguiPlugin,
 };
-use bevy::render::camera::ScalingMode;
 // use bevy_math::primitives::dim2::Circle;
 use bevy::math::primitives::Circle;
 // use bevy_pancam::PanCam;
-use bevy_prototype_lyon::prelude::*;
 use bevy_prototype_lyon::draw::{Fill, Stroke};
+use bevy_prototype_lyon::prelude::*;
 use geo::Centroid;
 use geo_types::Geometry;
 use gis_layers::AllLayers;
@@ -39,7 +38,7 @@ fn main() {
     app.insert_resource(ClearColor(Color::BLACK));
 
     // plugins
-    app.add_plugins(bevy::DefaultPlugins);
+    app.add_plugins((bevy::DefaultPlugins,PanCamPlugin::default()));
     app.add_plugins(ShapePlugin);
     app.add_plugins(EguiPlugin);
     // systems
@@ -70,7 +69,7 @@ fn startup(mut commands: Commands) {
         .into(),
         transform: initial_transform,
         ..default()
-    });
+    }).insert(PanCam::default());
 }
 
 fn ui(
@@ -80,94 +79,96 @@ fn ui(
     mut files_query: Query<&EntityFile>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
-    file_entity_query: Query<Entity,With<EntityFile>>,
+    file_entity_query: Query<Entity, With<EntityFile>>,
     all_entities_query: Query<Entity, Without<Camera>>,
     camera_query: Query<Entity, With<Camera>>,
 ) {
-    let camera = camera_query.get_single().unwrap();
-    egui::SidePanel::left("main")
-        // .resizable(true)
-        .show(egui_context.ctx_mut(), |ui| {
-            ui.vertical_centered(|ui| {
-                ui.heading(RichText::new("GIS").color(Color32::RED).strong());
-                ui.separator();
-                let select_btn =
-                    egui::Button::new(RichText::new("▶ Select File").color(Color32::GREEN));
-                let clear_btn = egui::Button::new(RichText::new("▶ Clear").color(Color32::YELLOW));
-                let exit_btn = egui::Button::new(RichText::new("▶ Exit").color(Color32::RED));
+    if let Some(camera) = camera_query.get_single().ok() {
+        egui::SidePanel::left("main")
+            // .resizable(true)
+            .show(egui_context.ctx_mut(), |ui| {
+                ui.vertical_centered(|ui| {
+                    ui.heading(RichText::new("GIS").color(Color32::RED).strong());
+                    ui.separator();
+                    let select_btn =
+                        egui::Button::new(RichText::new("▶ Select File").color(Color32::GREEN));
+                    let clear_btn =
+                        egui::Button::new(RichText::new("▶ Clear").color(Color32::YELLOW));
+                    let exit_btn = egui::Button::new(RichText::new("▶ Exit").color(Color32::RED));
 
-                if ui.add(select_btn).clicked() {
-                    if let Some(path_buf) = rfd::FileDialog::new().pick_file() {
-                        let extension = path_buf.extension().unwrap();
-                        if extension.eq("json") || extension.eq("geojson") {
-                            let path = Some(path_buf.display().to_string()).unwrap();
-                            let name = path_buf.file_name().unwrap().to_str().unwrap();
-                            let (layers, entities) = build_meshes(
-                                &mut *meshes,
-                                &mut *materials,
-                                &mut commands,
-                                path.to_owned(),
-                                name.to_owned(),
-                            );
-                            let entity_file = EntityFile {
-                                name: name.to_owned(),
-                                path: path.to_owned(),
-                                layers: layers,
-                                entities: entities,
-                            };
-                            let mut vec_entity_file: Vec<EntityFile> = Vec::new();
+                    if ui.add(select_btn).clicked() {
+                        if let Some(path_buf) = rfd::FileDialog::new().pick_file() {
+                            let extension = path_buf.extension().unwrap();
+                            if extension.eq("json") || extension.eq("geojson") {
+                                let path = Some(path_buf.display().to_string()).unwrap();
+                                let name = path_buf.file_name().unwrap().to_str().unwrap();
+                                let (layers, entities) = build_meshes(
+                                    &mut *meshes,
+                                    &mut *materials,
+                                    &mut commands,
+                                    path.to_owned(),
+                                    name.to_owned(),
+                                );
+                                let entity_file = EntityFile {
+                                    name: name.to_owned(),
+                                    path: path.to_owned(),
+                                    layers: layers,
+                                    entities: entities,
+                                };
+                                let mut vec_entity_file: Vec<EntityFile> = Vec::new();
 
-                            vec_entity_file.push(entity_file.clone());
+                                vec_entity_file.push(entity_file.clone());
 
-                            commands.spawn(entity_file);
+                                commands.spawn(entity_file);
 
-                            for file in files_query.iter() {
-                                vec_entity_file.push(file.clone());
+                                for file in files_query.iter() {
+                                    vec_entity_file.push(file.clone());
+                                }
+
+                                center_camera(&mut commands, camera, vec_entity_file);
                             }
-
-                            center_camera(&mut commands, camera, vec_entity_file);
                         }
                     }
-                }
 
-                if ui.add(clear_btn).clicked() {
-                    for entity in all_entities_query.iter() {
-                        commands.entity(entity).despawn();
+                    if ui.add(clear_btn).clicked() {
+                        for entity in all_entities_query.iter() {
+                            commands.entity(entity).despawn();
+                        }
                     }
-                }
 
-                if ui.add(exit_btn).clicked() {
-                    app_exit_events.send(bevy::app::AppExit);
-                }
-
-                ui.separator();
-
-                for file in &mut files_query.iter_mut() {
-                    let name = &file.name;
-                    let remove_file_btn =
-                        egui::Button::new(RichText::new("Remove").color(Color32::WHITE));
-                    let label_text = name.to_owned();
-
-                    ui.label(
-                        RichText::new(label_text)
-                            .strong()
-                            .color(Color32::DEBUG_COLOR),
-                    );
-
-                    if ui.add(remove_file_btn).clicked() {
-                        for entity_file in file_entity_query.iter(){
-                            commands.entity(entity_file).despawn();
-                        }
-
-                        for entity in file.entities.iter() {
-                            commands.entity(*entity).despawn();
-                        }
+                    if ui.add(exit_btn).clicked() {
+                        app_exit_events.send(bevy::app::AppExit);
                     }
 
                     ui.separator();
-                }
-            })
-        });
+
+                    for file in &mut files_query.iter_mut() {
+                        let name = &file.name;
+                        let remove_file_btn =
+                            egui::Button::new(RichText::new("Remove").color(Color32::WHITE));
+                        let label_text = name.to_owned();
+
+                        ui.label(
+                            RichText::new(label_text)
+                                .strong()
+                                .color(Color32::DEBUG_COLOR),
+                        );
+
+                        if ui.add(remove_file_btn).clicked() {
+                            for entity_file in file_entity_query.iter() {
+                                commands.entity(entity_file).despawn();
+                            }
+
+                            for entity in file.entities.iter() {
+                                commands.entity(*entity).despawn();
+                            }
+                        }
+
+                        ui.separator();
+                    }
+                })
+            });
+    }
 }
 
 fn build_meshes(
@@ -193,7 +194,8 @@ fn build_meshes(
                 let (builder, transform) = build_polygon(polygon, layers.last_layer_id());
 
                 let id = commands
-                    .spawn((builder.build(),
+                    .spawn((
+                        builder.build(),
                         Fill::color(Color::WHITE),
                         Stroke::new(Color::BLUE, 0.1),
                         transform,
@@ -208,13 +210,14 @@ fn build_meshes(
                 let (builder, transform) = build_linestring(linestring, layers.last_layer_id());
 
                 let id = commands
-                    .spawn((builder.build(),
+                    .spawn((
+                        builder.build(),
                         Fill::color(Color::WHITE),
                         Stroke::new(Color::YELLOW_GREEN, 0.1),
                         // transform,
                     ))
                     .id();
-                
+
                 // let id = commands
                 //     .spawn(builder.build(
                 //         DrawMode::Stroke(StrokeMode::color(Color::YELLOW_GREEN)),
@@ -256,7 +259,8 @@ fn build_meshes(
                         build_polygon(polygon.clone(), layers.last_layer_id());
 
                     let id = commands
-                        .spawn((builder.build(),
+                        .spawn((
+                            builder.build(),
                             Fill::color(Color::WHITE),
                             Stroke::new(Color::BLUE, 0.1),
                             transform,
@@ -286,7 +290,8 @@ fn build_meshes(
                         build_linestring(line.clone(), layers.last_layer_id());
 
                     let id = commands
-                        .spawn((builder.build(),
+                        .spawn((
+                            builder.build(),
                             Fill::color(Color::WHITE),
                             Stroke::new(Color::YELLOW_GREEN, 0.1),
                             transform,
@@ -349,5 +354,5 @@ fn center_camera(commands: &mut Commands, camera: Entity, entity_file: Vec<Entit
 
     new_camera.transform = Transform::from_xyz(center.0.x as f32, center.0.y as f32, 999.9);
 
-    // commands.spawn(new_camera).insert(PanCam::default());
+    commands.spawn(new_camera).insert(PanCam::default());
 }
