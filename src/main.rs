@@ -12,6 +12,7 @@ use bevy_egui::{
     egui::{self, Color32, RichText},
     EguiContexts, EguiPlugin,
 };
+use bevy::winit::WinitWindows;
 // use bevy_math::primitives::dim2::Circle;
 use bevy::math::primitives::Circle;
 // use bevy_pancam::PanCam;
@@ -44,6 +45,7 @@ fn main() {
     // systems
     app.add_systems(Startup, startup);
     app.add_systems(Update, ui);
+
     // run
     app.run();
 }
@@ -82,6 +84,7 @@ fn ui(
     file_entity_query: Query<Entity, With<EntityFile>>,
     all_entities_query: Query<Entity, Without<Camera>>,
     camera_query: Query<Entity, With<Camera>>,
+    mut windows: NonSend<WinitWindows>
 ) {
     if let Some(camera) = camera_query.get_single().ok() {
         egui::SidePanel::left("main")
@@ -182,23 +185,25 @@ fn build_meshes(
     let feature_collection = read_geojson_feature_collection(geojson);
     let mut layers: gis_layers::AllLayers = gis_layers::AllLayers::new();
     let mut entities_id: Vec<Entity> = Vec::new();
-
     for feature in feature_collection {
         let geometry = feature.geometry.unwrap();
         let geom: geo::Geometry = geometry.try_into().unwrap();
-
         match geom {
             Geometry::Polygon(polygon) => {
                 layers.add(geo::Geometry::Polygon(polygon.clone()), name.clone());
 
                 let (builder, transform) = build_polygon(polygon, layers.last_layer_id());
 
+
                 let id = commands
                     .spawn((
-                        builder.build(),
+                        ShapeBundle {
+                            path: builder.build(),
+                            ..default()
+                        },
                         Fill::color(Color::WHITE),
                         Stroke::new(Color::BLUE, 0.1),
-                        transform,
+                        // transform,
                     ))
                     .id();
 
@@ -211,20 +216,17 @@ fn build_meshes(
 
                 let id = commands
                     .spawn((
-                        builder.build(),
-                        Fill::color(Color::WHITE),
+                        ShapeBundle {
+                            path: builder.build(),
+                            ..default()
+                        },
+                        // builder.build(),
+                        Fill::color(Color::RED),
                         Stroke::new(Color::YELLOW_GREEN, 0.1),
                         // transform,
                     ))
                     .id();
-
-                // let id = commands
-                //     .spawn(builder.build(
-                //         DrawMode::Stroke(StrokeMode::color(Color::YELLOW_GREEN)),
-                //         transform,
-                //     ))
-                //     .id();
-
+                
                 entities_id.push(id);
             }
             Geometry::Point(point) => {
@@ -237,11 +239,11 @@ fn build_meshes(
                         // mesh: meshes.add(Circle::new(1.).into()).into(),
                         mesh: bevy::sprite::Mesh2dHandle(meshes.add(Circle::new(1.).mesh())),
                         material: materials.add(Color::PINK),
-                        transform: Transform::from_translation(Vec3::new(
-                            center.0.x as f32,
-                            center.0.y as f32,
-                            z,
-                        )),
+                        // transform: Transform::from_translation(Vec3::new(
+                        //     center.0.x as f32,
+                        //     center.0.y as f32,
+                        //     z,
+                        // )),
                         ..Default::default()
                     })
                     .id();
@@ -260,22 +262,16 @@ fn build_meshes(
 
                     let id = commands
                         .spawn((
-                            builder.build(),
+                            ShapeBundle {
+                                path: builder.build(),
+                                ..default()
+                            },
+                            // builder.build(),
                             Fill::color(Color::WHITE),
                             Stroke::new(Color::BLUE, 0.1),
-                            transform,
+                            // transform,
                         ))
                         .id();
-                    // let id = commands
-                    //     .spawn(builder.build(
-                    //         DrawMode::Outlined {
-                    //             fill_mode: FillMode::color(Color::WHITE),
-                    //             outline_mode: StrokeMode::new(Color::BLUE, 0.1),
-                    //         },
-                    //         transform,
-                    //     ))
-                    //     .id();
-
                     entities_id.push(id);
                 }
             }
@@ -291,18 +287,16 @@ fn build_meshes(
 
                     let id = commands
                         .spawn((
-                            builder.build(),
+                            // builder.build(),
+                            ShapeBundle {
+                                path: builder.build(),
+                                ..default()
+                            },
                             Fill::color(Color::WHITE),
                             Stroke::new(Color::YELLOW_GREEN, 0.1),
-                            transform,
+                            // transform,
                         ))
                         .id();
-                    // let id = commands
-                    //     .spawn(builder.build(
-                    //         DrawMode::Stroke(StrokeMode::color(Color::YELLOW_GREEN)),
-                    //         transform,
-                    //     ))
-                    //     .id();
 
                     entities_id.push(id);
                 }
@@ -315,11 +309,11 @@ fn build_meshes(
                         .spawn(bevy::sprite::MaterialMesh2dBundle {
                             mesh: bevy::sprite::Mesh2dHandle(meshes.add(Circle::new(1.).mesh())),
                             material: materials.add(Color::PINK),
-                            transform: Transform::from_translation(Vec3::new(
-                                point.0.x as f32,
-                                point.0.y as f32,
-                                z,
-                            )),
+                            // transform: Transform::from_translation(Vec3::new(
+                            //     point.0.x as f32,
+                            //     point.0.y as f32,
+                            //     z,
+                            // )),
                             ..Default::default()
                         })
                         .id();
